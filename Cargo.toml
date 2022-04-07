@@ -1,0 +1,3 @@
+[workspace]
+members = ["moq", "moq_derive", "test_suite"]
+
