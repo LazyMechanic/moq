@@ -14,11 +14,11 @@
 //! #[test]
 //! fn test_ok() {
 //!     let mock = TraitMock::new()
-//!         .expect_call_func(|arg: i64| {
+//!         .expect_func(|arg: i64| {
 //!             assert_eq!(arg, 42);
 //!             format!("Hello, {}", arg)
 //!         })
-//!         .expect_call_func(|arg: i64| {
+//!         .expect_func(|arg: i64| {
 //!             assert_eq!(arg, -1);
 //!             format!("Hello again, {}", -1)
 //!         });

@@ -1,246 +1,138 @@
-#[derive(Debug, Eq, PartialEq)]
-struct Struct(i32);
-
-#[moq::automock]
-trait Trait {
-    fn method(&self, arg: i32);
-    fn method_no_args(&self);
-    fn method_lifetime<'a>(&'a self, arg: &'a i32);
-    fn method_multiple_args<'a, 'b>(
-        &self,
-        arg1: i32,
-        arg2: String,
-        arg3: Struct,
-        arg4: &'a i32,
-        arg5: &'b i32,
-    );
-
-    fn method_def(&self, arg: i32) {
-        self.method(arg)
-    }
-    fn method_no_args_def(&self) {
-        self.method_no_args()
-    }
-    fn method_lifetime_def<'a>(&'a self, arg: &'a i32) {
-        self.method_lifetime(arg)
-    }
-    fn method_multiple_args_def<'a, 'b>(
-        &self,
-        arg1: i32,
-        arg2: String,
-        arg3: Struct,
-        arg4: &'a i32,
-        arg5: &'b i32,
-    ) {
-        self.method_multiple_args(arg1, arg2, arg3, arg4, arg5)
+#[test]
+fn test1() {
+    #[moq::automock]
+    trait Trait {
+        fn f(&self);
     }
 
-    #[moq(use_default)]
-    fn method_def_use_default(&self, arg: i32) {
-        self.method(arg)
-    }
-    #[moq(use_default)]
-    fn method_no_args_def_use_default(&self) {
-        self.method_no_args()
-    }
-    #[moq(use_default)]
-    fn method_lifetime_def_use_default<'a>(&'a self, arg: &'a i32) {
-        self.method_lifetime(arg)
-    }
-    #[moq(use_default)]
-    fn method_multiple_args_def_use_default<'a, 'b>(
-        &self,
-        arg1: i32,
-        arg2: String,
-        arg3: Struct,
-        arg4: &'a i32,
-        arg5: &'b i32,
-    ) {
-        self.method_multiple_args(arg1, arg2, arg3, arg4, arg5)
-    }
-
-    fn method_ret(&self, arg: i32) -> i32;
-    fn method_no_args_ret(&self) -> i32;
-    fn method_lifetime_ret<'a>(&'a self, arg: &'a i32) -> &'a i32;
-    fn method_multiple_args_ret<'a, 'b>(
-        &self,
-        arg1: i32,
-        arg2: String,
-        arg3: Struct,
-        arg4: &'a i32,
-        arg5: &'b i32,
-    ) -> (i32, String, Struct, &'a i32, &'b i32);
-}
-
-// In rust you can't specify lifetimes for closure
-// and auto lifetimes are wrong
-fn method_lifetime_ret_check(arg: &i32) -> &i32 {
-    assert_eq!(*arg, 1);
-    arg
-}
-
-fn method_multiple_args_ret_check<'a, 'b>(
-    arg1: i32,
-    arg2: String,
-    arg3: Struct,
-    arg4: &'a i32,
-    arg5: &'b i32,
-) -> (i32, String, Struct, &'a i32, &'b i32) {
-    assert_eq!(arg1, 1);
-    assert_eq!(arg2, "2");
-    assert_eq!(arg3, Struct(3));
-    assert_eq!(arg4, &4);
-    assert_eq!(arg5, &5);
-
-    (arg1, arg2, arg3, arg4, arg5)
-}
-
-fn make_mock() -> impl Trait {
-    TraitMock::new()
-        .expect_call_method(|arg: i32| {
-            assert_eq!(arg, 1);
-        })
-        .expect_call_method_no_args(|| {
-            assert_eq!(true, true);
-        })
-        .expect_call_method_lifetime(|arg: &i32| {
-            assert_eq!(*arg, 1);
-        })
-        .expect_call_method_multiple_args(
-            |arg1: i32, arg2: String, arg3: Struct, arg4: &i32, arg5: &i32| {
-                assert_eq!(arg1, 1);
-                assert_eq!(arg2, "2");
-                assert_eq!(arg3, Struct(3));
-                assert_eq!(arg4, &4);
-                assert_eq!(arg5, &5);
-            },
-        )
-        .expect_call_method_def(|arg: i32| {
-            assert_eq!(arg, 1);
-        })
-        .expect_call_method_no_args_def(|| {
-            assert_eq!(true, true);
-        })
-        .expect_call_method_lifetime_def(|arg: &i32| {
-            assert_eq!(*arg, 1);
-        })
-        .expect_call_method_multiple_args_def(
-            |arg1: i32, arg2: String, arg3: Struct, arg4: &i32, arg5: &i32| {
-                assert_eq!(arg1, 1);
-                assert_eq!(arg2, "2");
-                assert_eq!(arg3, Struct(3));
-                assert_eq!(arg4, &4);
-                assert_eq!(arg5, &5);
-            },
-        )
-        .expect_call_method(|arg: i32| {
-            assert_eq!(arg, 1);
-        })
-        .expect_call_method_no_args(|| {
-            assert_eq!(true, true);
-        })
-        .expect_call_method_lifetime(|arg: &i32| {
-            assert_eq!(*arg, 1);
-        })
-        .expect_call_method_multiple_args(
-            |arg1: i32, arg2: String, arg3: Struct, arg4: &i32, arg5: &i32| {
-                assert_eq!(arg1, 1);
-                assert_eq!(arg2, "2");
-                assert_eq!(arg3, Struct(3));
-                assert_eq!(arg4, &4);
-                assert_eq!(arg5, &5);
-            },
-        )
-        .expect_call_method_ret(|arg: i32| {
-            assert_eq!(arg, 1);
-            arg
-        })
-        .expect_call_method_no_args_ret(|| {
-            assert_eq!(true, true);
-            1
-        })
-        .expect_call_method_lifetime_ret(method_lifetime_ret_check)
-        .expect_call_method_multiple_args_ret(method_multiple_args_ret_check)
+    let m = TraitMock::new().expect_f(|| {});
+    m.f();
 }
 
 #[test]
-fn test() {
-    call_generic(make_mock());
-    call_boxed(Box::new(make_mock()));
-    call_ref(&make_mock());
+fn test2() {
+    #[moq::automock]
+    trait Trait {
+        fn f(&mut self);
+    }
+
+    let mut m = TraitMock::new().expect_f(|| {});
+    m.f();
 }
 
-fn call_generic<T: Trait>(obj: T) {
-    obj.method(1);
-    obj.method_no_args();
-    obj.method_lifetime(&1);
-    obj.method_multiple_args(1, "2".to_string(), Struct(3), &4, &5);
+#[test]
+fn test3() {
+    #[moq::automock]
+    trait Trait {
+        fn f(&self, arg: i32);
+    }
 
-    obj.method_def(1);
-    obj.method_no_args_def();
-    obj.method_lifetime_def(&1);
-    obj.method_multiple_args_def(1, "2".to_string(), Struct(3), &4, &5);
-
-    obj.method_def_use_default(1);
-    obj.method_no_args_def_use_default();
-    obj.method_lifetime_def_use_default(&1);
-    obj.method_multiple_args_def_use_default(1, "2".to_string(), Struct(3), &4, &5);
-
-    assert_eq!(obj.method_ret(1), 1);
-    assert_eq!(obj.method_no_args_ret(), 1);
-    assert_eq!(obj.method_lifetime_ret(&1), &1);
-    assert_eq!(
-        obj.method_multiple_args_ret(1, "2".to_string(), Struct(3), &4, &5),
-        (1, "2".to_string(), Struct(3), &4, &5)
-    );
+    let m = TraitMock::new().expect_f(|arg: i32| assert_eq!(arg, 42));
+    m.f(42);
 }
 
-fn call_boxed(obj: Box<dyn Trait>) {
-    obj.method(1);
-    obj.method_no_args();
-    obj.method_lifetime(&1);
-    obj.method_multiple_args(1, "2".to_string(), Struct(3), &4, &5);
+#[test]
+fn test4() {
+    #[moq::automock]
+    trait Trait {
+        fn f<'a>(&self, arg1: i32, arg2: String, arg3: &'a i32);
+    }
 
-    obj.method_def(1);
-    obj.method_no_args_def();
-    obj.method_lifetime_def(&1);
-    obj.method_multiple_args_def(1, "2".to_string(), Struct(3), &4, &5);
-
-    obj.method_def_use_default(1);
-    obj.method_no_args_def_use_default();
-    obj.method_lifetime_def_use_default(&1);
-    obj.method_multiple_args_def_use_default(1, "2".to_string(), Struct(3), &4, &5);
-
-    assert_eq!(obj.method_ret(1), 1);
-    assert_eq!(obj.method_no_args_ret(), 1);
-    assert_eq!(obj.method_lifetime_ret(&1), &1);
-    assert_eq!(
-        obj.method_multiple_args_ret(1, "2".to_string(), Struct(3), &4, &5),
-        (1, "2".to_string(), Struct(3), &4, &5)
-    );
+    let m = TraitMock::new().expect_f(|arg1: i32, arg2: String, arg3: &i32| {
+        assert_eq!(arg1, 1);
+        assert_eq!(arg2, "2");
+        assert_eq!(arg3, &3);
+    });
+    m.f(1, "2".to_string(), &3);
 }
 
-fn call_ref(obj: &dyn Trait) {
-    obj.method(1);
-    obj.method_no_args();
-    obj.method_lifetime(&1);
-    obj.method_multiple_args(1, "2".to_string(), Struct(3), &4, &5);
+#[test]
+fn test5() {
+    #[moq::automock]
+    trait Trait {
+        fn f(&self) -> i32;
+    }
 
-    obj.method_def(1);
-    obj.method_no_args_def();
-    obj.method_lifetime_def(&1);
-    obj.method_multiple_args_def(1, "2".to_string(), Struct(3), &4, &5);
+    let m = TraitMock::new().expect_f(|| 42);
+    assert_eq!(m.f(), 42);
+}
 
-    obj.method_def_use_default(1);
-    obj.method_no_args_def_use_default();
-    obj.method_lifetime_def_use_default(&1);
-    obj.method_multiple_args_def_use_default(1, "2".to_string(), Struct(3), &4, &5);
+#[test]
+fn test6() {
+    #[moq::automock]
+    trait Trait {
+        fn f(&self) -> (i32, String, &'static i32);
+    }
 
-    assert_eq!(obj.method_ret(1), 1);
-    assert_eq!(obj.method_no_args_ret(), 1);
-    assert_eq!(obj.method_lifetime_ret(&1), &1);
+    let m = TraitMock::new().expect_f(|| (1, "2".to_string(), &3));
+    assert_eq!(m.f(), (1i32, "2".to_string(), &3i32));
+}
+
+#[test]
+fn test7() {
+    #[moq::automock]
+    trait Trait {
+        fn f<'a>(&self, arg1: i32, arg2: String, arg3: &'a i32) -> (i32, String, &'a i32);
+    }
+
+    fn t<'a>(arg1: i32, arg2: String, arg3: &'a i32) -> (i32, String, &'a i32) {
+        assert_eq!(arg1, 1);
+        assert_eq!(arg2, "2");
+        assert_eq!(arg3, &3);
+        (arg1, arg2, arg3)
+    }
+    let m = TraitMock::new().expect_f(t);
+    assert_eq!(m.f(1, "2".to_string(), &3), (1i32, "2".to_string(), &3i32));
+}
+
+#[test]
+fn test8() {
+    #[moq::automock]
+    trait Trait {
+        fn f<'a, 'b>(&self, arg1: &'a i32, arg2: String, arg3: &'b i32) -> (i32, String, &'b i32);
+    }
+
+    fn t<'a, 'b>(arg1: &'a i32, arg2: String, arg3: &'b i32) -> (i32, String, &'b i32) {
+        assert_eq!(arg1, &1);
+        assert_eq!(arg2, "2");
+        assert_eq!(arg3, &3);
+        (*arg1, arg2, arg3)
+    }
+    let m = TraitMock::new().expect_f(t);
+    assert_eq!(m.f(&1, "2".to_string(), &3), (1i32, "2".to_string(), &3i32));
+}
+
+#[test]
+fn test9() {
+    #[derive(Debug, Eq, PartialEq)]
+    struct Struct1<'a>(&'a str);
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct Struct2<'a, 'b>(&'a Struct1<'b>);
+
+    #[moq::automock]
+    trait Trait {
+        fn f<'a, 'b>(
+            &self,
+            arg1: Struct1<'a>,
+            arg2: Struct2<'a, 'b>,
+            arg3: i32,
+        ) -> (Struct1<'a>, Struct2<'a, 'b>, i32);
+    }
+
+    fn t<'a, 'b>(
+        arg1: Struct1<'a>,
+        arg2: Struct2<'a, 'b>,
+        arg3: i32,
+    ) -> (Struct1<'a>, Struct2<'a, 'b>, i32) {
+        assert_eq!(arg1, Struct1("1"));
+        assert_eq!(arg2, Struct2(&Struct1("2")));
+        assert_eq!(arg3, 3);
+        (arg1, arg2, arg3)
+    }
+    let m = TraitMock::new().expect_f(t);
     assert_eq!(
-        obj.method_multiple_args_ret(1, "2".to_string(), Struct(3), &4, &5),
-        (1, "2".to_string(), Struct(3), &4, &5)
+        m.f(Struct1("1"), Struct2(&Struct1("2")), 3),
+        (Struct1("1"), Struct2(&Struct1("2")), 3)
     );
 }

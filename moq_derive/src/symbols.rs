@@ -12,9 +12,8 @@ define_symbols! {
     MOQ => "moq",
 
     // Flags
-    VALUE => "value",
-    VALUE_WITH => "value_with",
-    USE_DEFAULT => "use_default",
+    DEFAULT => "default",
+    DEFAULT_WITH => "default_with",
 }
 
 #[derive(Copy, Clone)]
