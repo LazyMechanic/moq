@@ -3,8 +3,8 @@ use crate::{symbols, utils};
 use syn::parse::{Parse, ParseStream};
 use syn::spanned::Spanned;
 use syn::{
-    parse_quote, Attribute, FnArg, ItemTrait, Lit, Meta, NestedMeta, Path, TraitItem,
-    TraitItemConst, TraitItemMethod, TraitItemType, Type,
+    parse_quote, Attribute, FnArg, Generics, Ident, ItemTrait, Lit, Meta, NestedMeta, Path,
+    ReturnType, TraitItem, TraitItemConst, TraitItemMethod, TraitItemType, Type,
 };
 
 pub struct Context {
@@ -12,38 +12,70 @@ pub struct Context {
     pub trait_def_orig: ItemTrait,
     /// Trait definition after processing
     pub trait_def: ItemTrait,
+
+    pub mock_ident: Ident,
+    pub mock_generics: Generics,
+
+    pub action_collection_ident: Ident,
 }
 
 impl Parse for Context {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let mut trait_def: ItemTrait = input.parse()?;
-        let trait_def_orig = utils::demoq_attr_trait_def(trait_def.clone());
+        let trait_def_orig = utils::demoqify(trait_def.clone());
 
-        trait_def.items = process_trait_items(trait_def.items)?;
+        let mock_ident = utils::format_mock_ident(&trait_def.ident);
+        let mock_generics = {
+            let trait_gen = utils::delifetimify_generics(&trait_def.generics);
+            utils::staticize(trait_gen)
+        };
+        let action_collection_ident = utils::format_action_collection_ident(&trait_def.ident);
+
+        trait_def.items = process_trait_items(
+            trait_def.items,
+            &trait_def.ident,
+            &trait_def.generics,
+            &mock_ident,
+            &mock_generics,
+        )?;
 
         Ok(Self {
             trait_def_orig,
             trait_def,
+            mock_ident,
+            mock_generics,
+            action_collection_ident,
         })
     }
 }
 
-fn process_trait_items<I>(items: I) -> Result<Vec<TraitItem>, syn::Error>
+fn process_trait_items<I>(
+    items: I,
+    trait_ident: &Ident,
+    trait_generics: &Generics,
+    mock_ident: &Ident,
+    mock_generics: &Generics,
+) -> Result<Vec<TraitItem>, syn::Error>
 where
     I: IntoIterator<Item = TraitItem>,
 {
     items
         .into_iter()
         .map(|item| match item {
-            TraitItem::Const(item) => Ok(TraitItem::Const(process_const(item)?)),
-            TraitItem::Method(item) => Ok(TraitItem::Method(process_method(item)?)),
-            TraitItem::Type(item) => Ok(TraitItem::Type(process_type(item)?)),
+            TraitItem::Method(item) => {
+                let item = apply_moq_attr_method(item)?;
+                let item =
+                    deselfify_method(item, trait_ident, trait_generics, mock_ident, mock_generics)?;
+                Ok(TraitItem::Method(item))
+            }
+            TraitItem::Const(item) => Ok(TraitItem::Const(apply_moq_attr_const(item)?)),
+            TraitItem::Type(item) => Ok(TraitItem::Type(apply_moq_attr_type(item)?)),
             item => Err(syn::Error::new_spanned(item, "unsupported item")),
         })
         .collect::<Result<_, syn::Error>>()
 }
 
-fn process_const(mut item: TraitItemConst) -> Result<TraitItemConst, syn::Error> {
+fn apply_moq_attr_const(mut item: TraitItemConst) -> Result<TraitItemConst, syn::Error> {
     let (moq_attrs, other_attrs): (Vec<Attribute>, Vec<Attribute>) = item
         .attrs
         .into_iter()
@@ -115,7 +147,7 @@ fn process_const(mut item: TraitItemConst) -> Result<TraitItemConst, syn::Error>
     Ok(item)
 }
 
-fn process_method(mut item: TraitItemMethod) -> Result<TraitItemMethod, syn::Error> {
+fn apply_moq_attr_method(mut item: TraitItemMethod) -> Result<TraitItemMethod, syn::Error> {
     let item_span = item.span();
     let (moq_attrs, other_attrs): (Vec<Attribute>, Vec<Attribute>) = item
         .attrs
@@ -183,7 +215,42 @@ fn process_method(mut item: TraitItemMethod) -> Result<TraitItemMethod, syn::Err
     Ok(item)
 }
 
-fn process_type(mut item: TraitItemType) -> Result<TraitItemType, syn::Error> {
+fn deselfify_method(
+    mut item: TraitItemMethod,
+    trait_ident: &Ident,
+    trait_generics: &Generics,
+    mock_ident: &Ident,
+    mock_generics: &Generics,
+) -> Result<TraitItemMethod, syn::Error> {
+    for inp in &mut item.sig.inputs {
+        match inp {
+            FnArg::Receiver(_) => {}
+            FnArg::Typed(arg) => {
+                utils::deselfify_type(
+                    &mut *arg.ty,
+                    trait_ident,
+                    trait_generics,
+                    mock_ident,
+                    mock_generics,
+                )?;
+            }
+        }
+    }
+
+    if let ReturnType::Type(_, ty) = &mut item.sig.output {
+        utils::deselfify_type(
+            &mut **ty,
+            trait_ident,
+            trait_generics,
+            mock_ident,
+            mock_generics,
+        )?;
+    }
+
+    Ok(item)
+}
+
+fn apply_moq_attr_type(mut item: TraitItemType) -> Result<TraitItemType, syn::Error> {
     let (moq_attrs, other_attrs): (Vec<Attribute>, Vec<Attribute>) = item
         .attrs
         .into_iter()

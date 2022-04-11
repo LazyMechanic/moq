@@ -35,11 +35,11 @@ impl Mock {
             .filter_map(|item| filter_map_exp_func(cx, item))
             .collect::<Result<Vec<_>, _>>()?;
         let self_generics = {
-            let trait_gen = utils::delifetiming_generics(&cx.trait_def.generics);
-            utils::apply_static_bounds(trait_gen)
+            let trait_gen = utils::delifetimify_generics(&cx.trait_def.generics);
+            utils::staticize(trait_gen)
         };
 
-        let actions_ident = utils::format_actions_ident(&cx.trait_def.ident);
+        let actions_ident = utils::format_action_collection_ident(&cx.trait_def.ident);
 
         let trait_vis = cx.trait_def.vis.clone();
         let trait_attrs = cx.trait_def.attrs.clone();
@@ -155,10 +155,10 @@ fn filter_map_exp_func(cx: &Context, item: &TraitItem) -> Option<Result<ImplItem
 fn exp_func(cx: &Context, func: &TraitItemMethod) -> Result<ImplItemMethod, syn::Error> {
     let action_path: Path = {
         let action_generics = {
-            let trait_gen = utils::delifetiming_generics(&cx.trait_def.generics);
-            let func_gen = utils::delifetiming_generics(&func.sig.generics);
+            let trait_gen = utils::delifetimify_generics(&cx.trait_def.generics);
+            let func_gen = utils::delifetimify_generics(&func.sig.generics);
             let merged = utils::merge_generics(trait_gen, func_gen);
-            utils::apply_static_bounds(merged)
+            utils::staticize(merged)
         };
 
         let action_ident = utils::format_action_ident(&cx.trait_def.ident, &func.sig.ident);
@@ -173,7 +173,7 @@ fn exp_func(cx: &Context, func: &TraitItemMethod) -> Result<ImplItemMethod, syn:
     };
     let exp_func_ident = format_ident!("expect_{}", func.sig.ident);
     let exp_func_generics = {
-        let exp_func_trait_bound = utils::exp_func_trait_bound(&func.sig)?;
+        let exp_func_trait_bound = utils::make_exp_func_trait_bound(&func.sig)?;
         let exp_func_generics = {
             let params: Punctuated<GenericParam, Token![,]> = parse_quote! { __MoqFunc };
             let where_clause: WhereClause = parse_quote! { where __MoqFunc: #exp_func_trait_bound };
@@ -184,8 +184,8 @@ fn exp_func(cx: &Context, func: &TraitItemMethod) -> Result<ImplItemMethod, syn:
                 where_clause: Some(where_clause),
             }
         };
-        let func_gen = utils::delifetiming_generics(&func.sig.generics);
-        let func_gen = utils::apply_static_bounds(func_gen);
+        let func_gen = utils::delifetimify_generics(&func.sig.generics);
+        let func_gen = utils::staticize(func_gen);
         utils::merge_generics(func_gen, exp_func_generics)
     };
     let (_exp_func_impl_generics, exp_func_ty_generics, exp_func_where_clause) =
@@ -262,8 +262,8 @@ fn trait_func(cx: &Context, func: &TraitItemMethod) -> Result<ImplItemMethod, sy
             let action_ident = utils::format_action_ident(&cx.trait_def.ident, &func.sig.ident);
             let call_generics = {
                 // TODO: find used trait generic types
-                let trait_gen = utils::delifetiming_generics(&cx.trait_def.generics);
-                let func_gen = utils::delifetiming_generics(&func.sig.generics);
+                let trait_gen = utils::delifetimify_generics(&cx.trait_def.generics);
+                let func_gen = utils::delifetimify_generics(&func.sig.generics);
                 utils::merge_generics(trait_gen, func_gen)
             };
             let (_impl_generics, ty_generics, _where_clause) = call_generics.split_for_impl();

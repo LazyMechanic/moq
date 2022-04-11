@@ -6,7 +6,7 @@ mod mock;
 mod symbols;
 mod utils;
 
-use crate::action::{Action, Actions};
+use crate::action::{Action, ActionCollection};
 use crate::context::Context;
 use crate::mock::Mock;
 
@@ -51,7 +51,7 @@ pub fn automock(_args: TokenStream, input: TokenStream) -> TokenStream {
 
 struct Parser {
     trait_def: ItemTrait,
-    actions_def: Actions,
+    actions_def: ActionCollection,
     actions: Vec<Action>,
     mock: Mock,
 }
@@ -59,7 +59,7 @@ struct Parser {
 impl Parse for Parser {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let cx = Context::parse(input)?;
-        let actions_def = Actions::parse(&cx)?;
+        let actions_def = ActionCollection::parse(&cx)?;
         let actions = cx
             .trait_def
             .items

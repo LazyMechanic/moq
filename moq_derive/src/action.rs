@@ -27,14 +27,14 @@ impl Action {
     pub fn parse(cx: &Context, func_sig: &Signature) -> Result<Self, syn::Error> {
         let self_ident = utils::format_action_ident(&cx.trait_def.ident, &func_sig.ident);
         let self_generics = {
-            let trait_gen = utils::delifetiming_generics(&cx.trait_def.generics);
-            let func_gen = utils::delifetiming_generics(&func_sig.generics);
+            let trait_gen = utils::delifetimify_generics(&cx.trait_def.generics);
+            let func_gen = utils::delifetimify_generics(&func_sig.generics);
             let merged = utils::merge_generics(trait_gen, func_gen);
-            utils::apply_static_bounds(merged)
+            utils::staticize(merged)
         };
 
-        let func_trait_bound = utils::exp_func_trait_bound(func_sig)?;
-        let func_boxed_ty = utils::boxed_exp_func(func_sig)?;
+        let func_trait_bound = utils::make_exp_func_trait_bound(func_sig)?;
+        let func_boxed_ty = utils::make_boxed_exp_func(func_sig)?;
 
         let call_asyncness = func_sig.asyncness;
         let call_awaiting = if func_sig.asyncness.is_some() {
@@ -42,7 +42,7 @@ impl Action {
         } else {
             None
         };
-        let call_generics = utils::only_lifetimes_generics(&func_sig.generics);
+        let call_generics = utils::lifetimify_generics(&func_sig.generics);
         let call_args = func_sig
             .inputs
             .clone()
@@ -156,21 +156,21 @@ impl ToTokens for Action {
     }
 }
 
-pub struct Actions {
+pub struct ActionCollection {
     pub ident: Ident,
 }
 
-impl Actions {
+impl ActionCollection {
     pub fn parse(cx: &Context) -> Result<Self, syn::Error> {
-        let ident = utils::format_actions_ident(&cx.trait_def.ident);
+        let ident = utils::format_action_collection_ident(&cx.trait_def.ident);
         Ok(Self { ident })
     }
 }
 
-impl ToTokens for Actions {
+impl ToTokens for ActionCollection {
     fn to_tokens(&self, dst: &mut TokenStream) {
         let ident = &self.ident;
-        let any_ty = utils::boxed_any();
+        let any_ty = utils::make_boxed_any();
 
         let def: ItemStruct = parse_quote! {
             #[allow(non_camel_case_types)]
