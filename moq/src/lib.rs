@@ -1,31 +1,128 @@
 //! # Moq
 //!
-//! This library provides macro that provides mock struct generating that implements trait.
+//! This library provides macro that generates mock struct that implements trait.
 //!
-//! ## Example
+//! To get started, just add an attribute macro to the trait for which you want to generate a mock object:
 //! ```
-//! use moq::automock;
-//!
-//! #[automock]
-//! trait Trait {
-//!     fn func(&self, arg: i32) -> String;
+//! #[moq::automock] // <-- this macro
+//! trait TraitForMocking {
+//!     fn func_that_i_want_to_test(&self, arg: String) -> Result<(), std::io::Error>;
 //! }
+//! ```
 //!
+//! Next, you can create a mock object and specify the expected behavior:
+//! ```
+//! # #[moq::automock]
+//! # trait TraitForMocking {
+//! #    fn func_that_i_want_to_test(&self, arg: String) -> Result<(), std::io::Error>;
+//! # }
 //! #[test]
-//! fn test_ok() {
-//!     let mock = TraitMock::new()
-//!         .expect_func(|arg: i64| {
-//!             assert_eq!(arg, 42);
-//!             format!("Hello, {}", arg)
-//!         })
-//!         .expect_func(|arg: i64| {
-//!             assert_eq!(arg, -1);
-//!             format!("Hello again, {}", -1)
+//! fn some_test() {
+//!     let mock = TraitForMockingMock::new()
+//!         .expect_func_that_i_want_to_test(|arg: String| {
+//!             assert_eq!(arg, "Hello, World!");
+//!             Ok(())
 //!         });
-//!     
-//!     mock.func(42);
-//!     mock.func(-1);
+//!
+//!     assert!(mock.func_that_i_want_to_test("Hello, World!".to_owned()).is_ok());
 //! }
+//! ```
+//!
+//! Also supports `async_trait`:
+//! ```
+//! #[moq::automock] // <- the main limitation is to specify the `automock` macro above the `async_trait`
+//! #[async_trait::async_trait]
+//! trait TraitForMocking {
+//!    async fn func_that_i_want_to_test(&self, arg: String) -> Result<(), std::io::Error>;
+//! }
+//!
+//! #[tokio::test]
+//! async fn some_test() {
+//!     let mock = TraitForMockingMock::new()
+//!         .expect_func_that_i_want_to_test(|arg: String| async {
+//!             assert_eq!(arg, "Hello, World!");
+//!             Ok(())
+//!         });
+//!
+//!     assert!(mock.func_that_i_want_to_test("Hello, World!".to_owned()).await.is_ok());
+//! }
+//! ```
+//!
+//! ## How its work
+//! Generated mock struct checks that all specified expectation will calls in specified order.
+//! If `f1()` is called while `f2()` is expected, then there will be a panic.
+//! ```
+//! #[moq::automock]
+//! trait Trait {
+//!     fn f1(&self);
+//!     fn f2(&self);
+//! }
+//! let mock = TraitMock::new().expect_f2(||{});
+//! mock.f1() // Panic
+//! ```
+//!
+//! Checks if all expected functions are being called, if not then will be a panic.
+//! ```
+//! #[moq::automock]
+//! trait Trait {
+//!     fn f1(&self);
+//!     fn f2(&self);
+//! }
+//! let mock = TraitMock::new()
+//!     .expect_f1(||{})
+//!     .expect_f2(||{});
+//! mock.f1()
+//! // Panic when mock will drop
+//! ```
+//!
+//! ## Attribute `#[moq(default)]` function
+//! Specifies that needs to use the default implementation of the function:
+//! ```
+//! #[moq::automock]
+//! trait Trait {
+//!     fn f1(&self);
+//!     
+//!     #[moq(default)]
+//!     fn def(&self) {
+//!         self.f1();
+//!     }
+//! }
+//! let mock = TraitMock::new().expect_f1(|| {});
+//! mock.def(); // Success
+//! ```
+//!
+//! ## Attribute `#[moq(default = "...")]` associative type
+//! Sets the associative type:
+//! ```
+//! #[moq::automock]
+//! trait Trait {
+//!     #[moq(default = "i32"]
+//!     type T;
+//! }
+//! let _: TraitMock::T = 42i32;
+//! ```
+//!
+//! ## Attribute `#[moq(default = ...)]` const
+//! Initializes or overrides default const value with specified value:
+//! ```
+//! #[moq::automock]
+//! trait Trait {
+//!     #[moq(default = 42]
+//!     const CONST: i32;
+//! }
+//! assert_eq!(TraitMock::CONST, 42);
+//! ```
+//!
+//! ## Attribute `#[moq(default_with = "...")]` const
+//! Initializes or overrides default const value with specified const function:
+//! ```
+//! #[moq::automock]
+//! trait Trait {
+//!     #[moq(default_with = "some_func"]
+//!     const CONST: i32;
+//! }
+//! const fn some_func() -> i32 { 42 }
+//! assert_eq!(TraitMock::CONST, 42);
 //! ```
 
 pub use moq_derive::automock;

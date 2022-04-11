@@ -4,7 +4,7 @@ This library provides macro that provides mock struct generating that implements
 
 ```toml
 [dependencies]
-moq = "0.1"
+moq = "0.2"
 ```
 
 ## Usage example
@@ -82,10 +82,10 @@ async fn test_ok() {
 You can find more examples in the tests.
 
 ## TODO
-- Supporting static functions
-- Supporting generic functions
-- Macro `moq::mock!(..)` for generating mock struct for external trait
-- Generating mock struct for struct without trait
+- [x] Supporting generic functions
+- [ ] Supporting static functions
+- [ ] Macro `moq::mock!(..)` for generating mock struct for external trait
+- [ ] Generating mock struct for struct without trait
 
 #### License
 
