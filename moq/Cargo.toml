@@ -3,8 +3,9 @@ name = "moq"
 description = "Mock generator"
 authors = ["LazyMechanic <asharnrus@gmail.com>"]
 license = "MIT OR Apache-2.0"
-version = "0.3.0"
+version = "0.3.1"
 repository = "https://github.com/LazyMechanic/moq"
+documentation = "https://docs.rs/moq"
 keywords = ["test", "mock", "mocking", "generator"]
 categories = ["development-tools::testing"]
 include = ["src/**/*.rs", "README.md", "LICENSE"]
@@ -13,8 +14,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-moq_derive = { version = "=0.3.0", path = "../moq_derive" }
-moq_lambda = { version = "=0.1.0", path = "../moq_lambda" }
+moq_derive = { version = "=0.3.1", path = "../moq_derive" }
+moq_lambda = { version = "=0.1.1", path = "../moq_lambda" }
 
 async-trait = "0.1"
 

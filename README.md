@@ -1,5 +1,9 @@
 # Moq
 
+[<img alt="crates.io" src="https://img.shields.io/crates/v/moq?style=flat-square">](https://crates.io/crates/moq)
+[<img alt="docs.rs" src="https://img.shields.io/docsrs/moq?style=flat-square">](https://docs.rs/moq)
+[<img alt="build" src="https://img.shields.io/github/workflow/status/LazyMechanic/moq/Rust?style=flat-square">](https://github.com/LazyMechanic/moq/actions)
+
 This library provides macro that provides mock struct generating that implements trait.
 
 ```toml
