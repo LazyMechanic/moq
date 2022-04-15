@@ -1,4 +1,5 @@
-use crate::{utils, Context};
+use crate::context::Context;
+use crate::utils;
 
 use proc_macro2::TokenStream;
 use quote::{quote, ToTokens};
@@ -19,7 +20,7 @@ pub struct Action {
     call_generics: Generics,
     call_args: Punctuated<FnArg, Token![,]>,
     call_ret: ReturnType,
-    call_inner_args: Pat,
+    call_inner_args: Vec<Ident>,
     phantom: Option<(Ident, Type)>,
 }
 
@@ -58,14 +59,13 @@ impl Action {
                 FnArg::Typed(arg) => Some(arg),
             })
             .map(|arg| match &*arg.pat {
-                Pat::Ident(pat) => Ok(&pat.ident),
+                Pat::Ident(pat) => Ok(pat.ident.clone()),
                 x => Err(syn::Error::new(
                     x.span(),
                     "unsupported function argument pattern",
                 )),
             })
             .collect::<Result<Vec<_>, _>>()?;
-        let call_inner_args = parse_quote! { (#(#call_inner_args,)*) };
 
         let phantom = {
             let generics_ty = self_generics
@@ -145,7 +145,7 @@ impl ToTokens for Action {
 
                 #call_asyncness fn call #call_ty_generics (&self, #call_args) #call_ret #call_where_clause {
                     self.func
-                        .call(#call_inner_args)
+                        .call((#(#call_inner_args,)*))
                         #call_awaiting
                 }
             }

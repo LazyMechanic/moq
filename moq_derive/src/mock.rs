@@ -1,5 +1,5 @@
+use crate::context::Context;
 use crate::utils;
-use crate::Context;
 
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote, ToTokens};
@@ -261,7 +261,6 @@ fn trait_func(cx: &Context, func: &TraitItemMethod) -> Result<ImplItemMethod, sy
         None => {
             let action_ident = utils::format_action_ident(&cx.trait_def.ident, &func.sig.ident);
             let call_generics = {
-                // TODO: find used trait generic types
                 let trait_gen = utils::delifetimify_generics(&cx.trait_def.generics);
                 let func_gen = utils::delifetimify_generics(&func.sig.generics);
                 utils::merge_generics(trait_gen, func_gen)

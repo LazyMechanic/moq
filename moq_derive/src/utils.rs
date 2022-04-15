@@ -77,28 +77,22 @@ pub fn make_exp_func_trait_bound(
         }
     };
 
-    let func_trait: Type = if is_async {
-        parse_quote! { ::moq::AsyncFunc }
-    } else {
-        parse_quote! { ::moq::Func }
-    };
-
     let lts_bounds: Option<BoundLifetimes> = if lts.is_empty() {
         None
     } else {
         Some(parse_quote! { for<#(#lts),*> })
     };
 
-    let args_ty: Type = if args_ty.is_empty() {
-        parse_quote! { () }
-    } else {
-        parse_quote! { (#(#args_ty,)*) }
-    };
-
     let ret_ty = ret_ty.unwrap_or_else(|| parse_quote! { () });
 
+    let func_trait: Type = if is_async {
+        parse_quote! { ::moq::AsyncFunc<(#(#args_ty,)*), #ret_ty> }
+    } else {
+        parse_quote! { ::moq::Func<(#(#args_ty,)*), #ret_ty> }
+    };
+
     let res = parse_quote! {
-        #lts_bounds #func_trait<#args_ty, #ret_ty>
+        #lts_bounds #func_trait
             + ::std::marker::Send
             + ::std::marker::Sync
             + 'static

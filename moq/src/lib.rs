@@ -127,21 +127,27 @@
 
 pub use moq_derive::automock;
 
-use std::future::Future;
-
 pub trait Func<Args, Ret> {
-    fn call(&self, args: Args) -> Ret;
+    fn call<'a>(&'a self, args: Args) -> Ret
+    where
+        Args: 'a,
+        Ret: 'a;
 }
 
 macro_rules! impl_func (
     ($($param:ident)*) => {
         impl<Function, $($param,)* Ret> Func<($($param,)*), Ret> for Function
         where
-            Function: Fn($($param),*) -> Ret,
+            Function: Fn($($param),*) -> Ret + Sync + 'static,
+            $($param: Send,)*
         {
             #[inline]
             #[allow(non_snake_case)]
-            fn call(&self, ($($param,)*): ($($param,)*)) -> Ret {
+            fn call<'a>(&'a self, ($($param,)*): ($($param,)*)) -> Ret
+            where
+                $($param: 'a,)*
+                Ret: 'a,
+            {
                 (self)($($param,)*)
             }
         }
@@ -164,7 +170,10 @@ impl_func!(A B C D E F G H I J K L);
 
 #[async_trait::async_trait]
 pub trait AsyncFunc<Args, Ret> {
-    async fn call(&self, arg: Args) -> Ret;
+    async fn call<'a>(&'a self, args: Args) -> Ret
+    where
+        Args: 'a,
+        Ret: 'a;
 }
 
 macro_rules! impl_async_func (
@@ -173,12 +182,16 @@ macro_rules! impl_async_func (
         impl<Function, $($param,)* Ret, Fut> AsyncFunc<($($param,)*), Ret> for Function
         where
             Function: Fn($($param),*) -> Fut + Sync + 'static,
-            Fut: Future<Output = Ret> + Send,
-            $($param: Send + 'static,)*
+            Fut: std::future::Future<Output = Ret> + Send + 'static,
+            $($param: Send,)*
         {
             #[inline]
             #[allow(non_snake_case)]
-            async fn call(&self, ($($param,)*): ($($param,)*)) -> Ret {
+            async fn call<'a>(&'a self, ($($param,)*): ($($param,)*)) -> Ret
+            where
+                $($param: 'a,)*
+                Ret: 'a,
+            {
                 (self)($($param,)*).await
             }
         }
