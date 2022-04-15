@@ -1,9 +1,9 @@
 [package]
-name = "moq"
-description = "Mock generator"
+name = "moq_lambda"
+description = "Lambda generator"
 authors = ["LazyMechanic <asharnrus@gmail.com>"]
 license = "MIT OR Apache-2.0"
-version = "0.2.0"
+version = "0.1.0"
 repository = "https://github.com/LazyMechanic/moq"
 keywords = ["test", "mock", "mocking", "generator"]
 categories = ["development-tools::testing"]
@@ -12,8 +12,11 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[dependencies]
-moq_derive = { version = "=0.2.0", path = "../moq_derive" }
-moq_lambda = { version = "=0.1.0", path = "../moq_lambda" }
+[lib]
+proc-macro = true
 
-async-trait = "0.1"
+[dependencies]
+syn = { version = "1.0", features = ["full"] }
+quote = "1.0"
+proc-macro2 = "1.0"
+itertools = "0.10"

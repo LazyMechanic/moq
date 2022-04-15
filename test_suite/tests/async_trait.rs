@@ -84,23 +84,25 @@ async fn test6() {
     assert_eq!(m.f(1, "2".to_owned()).await, 1);
 }
 
-// TODO: fix
-// #[tokio::test]
-// async fn test7() {
-//     #[derive(Debug, Eq, PartialEq)]
-//     struct Struct<'a>(&'a str);
-//
-//     #[moq::automock]
-//     #[async_trait::async_trait]
-//     trait Trait {
-//         async fn f<'a>(&self, arg: Struct<'a>);
-//     }
-//
-//     let m = TraitMock::new().expect_f(|arg: Struct<'_>| async move {
-//         assert_eq!(arg, Struct("1"));
-//     });
-//     m.f(Struct("1")).await;
-// }
+#[tokio::test]
+async fn test7() {
+    #[derive(Debug, Eq, PartialEq)]
+    struct Struct<'a>(&'a str);
+
+    #[moq::automock]
+    #[async_trait::async_trait]
+    trait Trait {
+        async fn f<'a>(&self, arg: Struct<'a>);
+    }
+
+    let m = TraitMock::new().expect_f(moq::lambda!(
+        async fn <'a>(arg: Struct<'a>) {
+            assert_eq!(arg, Struct("1"));
+        }
+    ));
+
+    m.f(Struct("1")).await;
+}
 
 #[tokio::test]
 async fn test8() {
@@ -117,35 +119,43 @@ async fn test8() {
     assert_eq!(m.f().await, Struct("1"));
 }
 
-// TODO: fix
-// #[tokio::test]
-// async fn test9() {
-//     #[derive(Debug, Eq, PartialEq)]
-//     struct Struct<'a>(&'a str);
-//
-//     #[moq::automock]
-//     #[async_trait::async_trait]
-//     trait Trait {
-//         async fn f<'a>(&self, arg: Struct<'a>);
-//     }
-//
-//     let m = TraitMock::new().expect_f(|arg: Struct<'_>| async move {
-//         assert_eq!(arg, Struct("1"));
-//     });
-//     m.f(Struct("1")).await;
-// }
-//
-// #[tokio::test]
-// async fn test10() {
-//     #[derive(Debug, Eq, PartialEq)]
-//     struct Struct<'a>(&'a str);
-//
-//     #[moq::automock]
-//     #[async_trait::async_trait]
-//     trait Trait {
-//         async fn f(&self) -> Struct<'static>;
-//     }
-//
-//     let m = TraitMock::new().expect_f(|| async move { Struct("1") });
-//     assert_eq!(m.f().await, Struct("1"));
-// }
+#[tokio::test]
+async fn test9() {
+    #[derive(Debug, Eq, PartialEq)]
+    struct Struct<'a>(&'a str);
+
+    #[moq::automock]
+    #[async_trait::async_trait]
+    trait Trait {
+        async fn f<'a>(&self, arg: Struct<'a>) -> Struct<'a>;
+    }
+
+    let m = TraitMock::new().expect_f(moq::lambda!(
+        async fn <'a>(arg: Struct<'a>) -> Struct<'a> {
+            assert_eq!(arg, Struct("1"));
+            arg
+        }
+    ));
+    assert_eq!(m.f(Struct("1")).await, Struct("1"));
+}
+
+#[tokio::test]
+async fn test10() {
+    #[derive(Debug, Eq, PartialEq)]
+    struct Struct<'a>(&'a str);
+
+    #[moq::automock]
+    #[async_trait::async_trait]
+    trait Trait {
+        async fn f<'a, 'b>(&self, arg1: Struct<'a>, arg2: Struct<'b>) -> Struct<'b>;
+    }
+
+    let m = TraitMock::new().expect_f(moq::lambda!(
+        async fn <'a, 'b>(arg1: Struct<'a>, arg2: Struct<'b>) -> Struct<'b> {
+            assert_eq!(arg1, Struct("1"));
+            assert_eq!(arg2, Struct("2"));
+            arg2
+        }
+    ));
+    assert_eq!(m.f(Struct("1"), Struct("2")).await, Struct("2"));
+}

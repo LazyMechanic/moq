@@ -125,7 +125,9 @@
 //! assert_eq!(TraitMock::CONST, 42);
 //! ```
 
+pub use async_trait::async_trait;
 pub use moq_derive::automock;
+pub use moq_lambda::lambda;
 
 pub trait Func<Args, Ret> {
     fn call<'a>(&'a self, args: Args) -> Ret
