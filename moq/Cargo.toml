@@ -17,3 +17,6 @@ moq_derive = { version = "=0.2.0", path = "../moq_derive" }
 moq_lambda = { version = "=0.1.0", path = "../moq_lambda" }
 
 async-trait = "0.1"
+
+[dev-dependencies]
+tokio = { version = "1.17.0", features = ["full"] }

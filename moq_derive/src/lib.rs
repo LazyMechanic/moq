@@ -14,10 +14,8 @@ use syn::parse_macro_input;
 /// Macro that provides mock struct generating that implements trait
 ///
 /// ## Example
-/// ```
-/// # use moq_derive::automock;
-///
-/// #[automock]
+/// ```ignore
+/// #[moq::automock]
 /// trait Trait {
 ///     fn func(&self, arg: i32) -> String;
 /// }

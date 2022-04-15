@@ -86,6 +86,7 @@ You can find more examples in the tests.
 - [ ] Supporting static functions
 - [ ] Macro `moq::mock!(..)` for generating mock struct for external trait
 - [ ] Generating mock struct for struct without trait
+- [ ] Capturing environment in `moq::lambda!`
 
 #### License
 

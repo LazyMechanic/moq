@@ -30,7 +30,8 @@
 //!
 //! Also supports `async_trait`:
 //! ```
-//! #[moq::automock] // <- the main limitation is to specify the `automock` macro above the `async_trait`
+//! #[moq::automock] // <- the main limitation is to specify
+//!                  // the `automock` macro above the `async_trait`
 //! #[async_trait::async_trait]
 //! trait TraitForMocking {
 //!    async fn func_that_i_want_to_test(&self, arg: String) -> Result<(), std::io::Error>;
@@ -48,10 +49,47 @@
 //! }
 //! ```
 //!
+//! If function has arguments with lifetimes then `moq::lambda!` macro can help with it:
+//! ```
+//! #[derive(Debug, Eq, PartialEq)]
+//! struct Struct<'a>(&'a str);
+//!
+//! #[moq::automock]
+//! #[async_trait::async_trait]
+//! trait TraitForMocking {
+//!    async fn func_that_i_want_to_test<'a, 'b>(
+//!         &self,
+//!         arg1: Struct<'a>,
+//!         arg2: Struct<'b>,
+//!    ) -> Struct<'b>;
+//! }
+//!
+//! #[tokio::test]
+//! async fn some_test() {
+//!     let mock = TraitForMockingMock::new()
+//!         .expect_func_that_i_want_to_test(moq::lambda!(
+//!             async fn <'a, 'b>(arg1: Struct<'a>, arg2: Struct<'b>) -> Struct<'b> {
+//!                 assert_eq!(arg1, Struct("Hello"));
+//!                 assert_eq!(arg2, Struct("World"));
+//!                 arg2
+//!             }
+//!         ));
+//!
+//!     assert_eq!(
+//!         mock.func_that_i_want_to_test(
+//!             Struct("Hello"),
+//!             Struct("World"),
+//!         ).await,
+//!         Struct("World"),
+//!     );
+//! }
+//! ```
+//! More info about `moq::lambda!` macro you will find below.
+//!
 //! ## How its work
 //! Generated mock struct checks that all specified expectation will calls in specified order.
 //! If `f1()` is called while `f2()` is expected, then there will be a panic.
-//! ```
+//! ```should_panic
 //! #[moq::automock]
 //! trait Trait {
 //!     fn f1(&self);
@@ -62,7 +100,7 @@
 //! ```
 //!
 //! Checks if all expected functions are being called, if not then will be a panic.
-//! ```
+//! ```should_panic
 //! #[moq::automock]
 //! trait Trait {
 //!     fn f1(&self);
@@ -96,10 +134,10 @@
 //! ```
 //! #[moq::automock]
 //! trait Trait {
-//!     #[moq(default = "i32"]
+//!     #[moq(default = "i32")]
 //!     type T;
 //! }
-//! let _: TraitMock::T = 42i32;
+//! let _: <TraitMock as Trait>::T = 42i32;
 //! ```
 //!
 //! ## Attribute `#[moq(default = ...)]` const
@@ -107,10 +145,10 @@
 //! ```
 //! #[moq::automock]
 //! trait Trait {
-//!     #[moq(default = 42]
+//!     #[moq(default = 42)]
 //!     const CONST: i32;
 //! }
-//! assert_eq!(TraitMock::CONST, 42);
+//! assert_eq!(<TraitMock as Trait>::CONST, 42);
 //! ```
 //!
 //! ## Attribute `#[moq(default_with = "...")]` const
@@ -118,11 +156,63 @@
 //! ```
 //! #[moq::automock]
 //! trait Trait {
-//!     #[moq(default_with = "some_func"]
+//!     #[moq(default_with = "some_func")]
 //!     const CONST: i32;
 //! }
 //! const fn some_func() -> i32 { 42 }
 //! assert_eq!(TraitMock::CONST, 42);
+//! ```
+//!
+//! ## Macro `moq::lambda!(...)`
+//! Helpful macro for generating closure with specified lifetimes.
+//! In rust you can't specify lifetimes for closure but you should, because lifetime
+//! inference in closure is dumb. Then this macro will help.
+//! Currently, capturing external variables is not possible, but this is in the plans.
+//!
+//! Syntax is like anonymous function:
+//! ```
+//! # fn main() {
+//! moq::lambda!(
+//! //  asyncness
+//! //  |        
+//! //  |        generic params (lifetimes)
+//! //  |        |
+//! //  |        |    arguments
+//! //  |        |    |
+//! //  |        |    |             return type
+//! //  |        |    |             |
+//! //  vvvvv    vvvv vvvvvvvvvvvv  vvvvvvvvvvvvvvv
+//!     async fn <'a>(arg: &'a str) -> &'static str {
+//!         // ...
+//!         # unimplemented!()
+//!     }
+//! )
+//! # ;
+//! # }
+//! ```
+//!
+//! It turns to something like that:
+//! ```
+//! # fn main() {
+//! {
+//!     struct __MoqLambda {}
+//!     impl __MoqLambda {
+//!         fn new() -> Self { Self{} }
+//!     }
+//!     #[::moq::async_trait]
+//!     impl<'a> ::moq::AsyncFunc<(&'a str,), &'static str> for __MoqLambda {
+//!         async fn call<'__moq>(&'__moq self, args: (&'a str,)) -> &'static str
+//!         where (&'a str,): '__moq,
+//!               &'static str: '__moq
+//!         {
+//!             // ...
+//!             # unimplemented!()
+//!         }
+//!     }
+//!     __MoqLambda::new()
+//! }
+//! # ;
+//! # }
 //! ```
 
 pub use async_trait::async_trait;
