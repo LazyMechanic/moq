@@ -4,7 +4,7 @@ This library provides macro that provides mock struct generating that implements
 
 ```toml
 [dependencies]
-moq = "0.2"
+moq = "0.3"
 ```
 
 ## Usage example
