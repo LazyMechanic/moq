@@ -202,7 +202,7 @@ impl ToTokens for ActionCollection {
                     let idx = self.cur_idx.fetch_add(1, ::std::sync::atomic::Ordering::SeqCst);
                     assert!(
                         idx < self.actions.len(),
-                        "an attempt to perform an extra action",
+                        "an attempt to execute an extra action",
                     );
 
                     &*self.actions[idx].downcast_ref::<__MoqAction>().expect("downcasting action type failed, unexpected action")
