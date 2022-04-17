@@ -8,7 +8,7 @@ This library provides macro that provides mock struct generating that implements
 
 ```toml
 [dependencies]
-moq = "0.3"
+moq = "0.4"
 ```
 
 ## Usage example
@@ -83,14 +83,14 @@ async fn test_ok() {
 }
 ```
 
-You can find more examples in the tests.
+You can find more examples in the [tests](https://github.com/LazyMechanic/moq/tree/master/test_suite/tests).
 
 ## TODO
 - [x] Supporting generic functions
 - [ ] Supporting static functions
 - [ ] Macro `moq::mock!(..)` for generating mock struct for external trait
 - [ ] Generating mock struct for struct without trait
-- [ ] Capturing environment in `moq::lambda!`
+- [x] Capturing environment in `moq::lambda!`
 
 #### License
 
