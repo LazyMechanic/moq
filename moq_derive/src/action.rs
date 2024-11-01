@@ -61,7 +61,9 @@ impl Action {
                 Ok::<_, syn::Error>(FnArg::Typed(pat))
             })
             .collect::<Result<_, _>>()?;
-        let call_ret = make_action_call_func_ret(trait_func)?;
+        let call_ret = make_action_call_func_ret(cx, trait_func)?
+            .map(|ty| parse_quote! { -> #ty })
+            .unwrap_or(ReturnType::Default);
         let call_pass_args = trait_func
             .sig
             .inputs
