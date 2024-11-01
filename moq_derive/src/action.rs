@@ -138,6 +138,7 @@ impl ToTokens for Action {
         };
 
         let def: ItemStruct = parse_quote! {
+            #[doc(hidden)]
             #[allow(non_camel_case_types)]
             struct #self_ident #self_ty_generics #self_where_clause {
                 func: #func_boxed_ty,
@@ -188,6 +189,7 @@ impl ToTokens for ActionCollection {
         let any_ty = utils::make_boxed_any();
 
         let def: ItemStruct = parse_quote! {
+            #[doc(hidden)]
             #[allow(non_camel_case_types)]
             #[derive(Default)]
             struct #ident {
