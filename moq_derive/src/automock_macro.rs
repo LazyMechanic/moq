@@ -3,6 +3,7 @@ use crate::context::Context;
 use crate::mock::Mock;
 use proc_macro2_diagnostics::Diagnostic;
 
+use crate::utils;
 use quote::{quote, ToTokens};
 use syn::parse::{Parse, ParseStream};
 use syn::{ItemTrait, TraitItem};
@@ -13,6 +14,8 @@ pub fn automock_impl(
 ) -> Result<proc_macro2::TokenStream, Diagnostic> {
     let p = syn::parse2::<AutomockMacro>(input)?;
     let output = quote! { #p };
+
+    //panic!("{}", output.to_string());
 
     Ok(output)
 }
@@ -26,22 +29,23 @@ pub struct AutomockMacro {
 
 impl Parse for AutomockMacro {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let cx = Context::parse(input)?;
-        let actions_def = ActionCollection::parse(&cx)?;
+        let trait_def = input.parse::<ItemTrait>()?;
+        let demoquified_trait_def = utils::demoqify_trait(trait_def.clone());
+        let cx = Context::from_ast(trait_def);
+        let actions_def = ActionCollection::from_ast(&cx)?;
         let actions = cx
-            .trait_def
-            .items
+            .trait_items
             .iter()
             .filter_map(|item| match item {
-                TraitItem::Fn(item) => Some(&item.sig),
+                TraitItem::Fn(item) => Some(item),
                 _ => None,
             })
-            .map(|sig| Action::parse(&cx, sig))
+            .map(|trait_func| Action::from_ast(&cx, trait_func))
             .collect::<Result<_, _>>()?;
-        let mock = Mock::parse(&cx)?;
+        let mock = Mock::from_ast(&cx)?;
 
         Ok(Self {
-            trait_def: cx.trait_def_orig,
+            trait_def: demoquified_trait_def,
             actions_def,
             actions,
             mock,

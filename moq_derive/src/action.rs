@@ -1,15 +1,17 @@
 use crate::context::Context;
 use crate::utils;
 
+use crate::utils::{make_action_call_func_ret, MergeGenerics};
 use proc_macro2::TokenStream;
 use quote::{quote, ToTokens};
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::{
-    parse_quote, FnArg, Generics, Ident, ItemImpl, ItemStruct, Pat, ReturnType, Signature, Token,
+    parse_quote, FnArg, Generics, Ident, ItemImpl, ItemStruct, Pat, ReturnType, Token, TraitItemFn,
     Type, TypeParamBound,
 };
 
+#[derive(Debug)]
 pub struct Action {
     self_ident: Ident,
     self_generics: Generics,
@@ -20,38 +22,48 @@ pub struct Action {
     call_generics: Generics,
     call_args: Punctuated<FnArg, Token![,]>,
     call_ret: ReturnType,
-    call_inner_args: Vec<Ident>,
+    call_pass_args: Vec<Ident>,
     phantom: Option<(Ident, Type)>,
 }
 
 impl Action {
-    pub fn parse(cx: &Context, func_sig: &Signature) -> Result<Self, syn::Error> {
-        let self_ident = utils::format_action_ident(&cx.trait_def.ident, &func_sig.ident);
+    pub fn from_ast(cx: &Context, trait_func: &TraitItemFn) -> Result<Self, syn::Error> {
+        let self_ident = utils::format_action_ident(&cx.trait_ident, &trait_func.sig.ident);
         let self_generics = {
-            let trait_gen = utils::delifetimify_generics(&cx.trait_def.generics);
-            let func_gen = utils::delifetimify_generics(&func_sig.generics);
-            let merged = utils::merge_generics(trait_gen, func_gen);
-            utils::staticize(merged)
+            let trait_gen = utils::delifetimify_generics(&cx.trait_generics);
+            let func_gen = utils::delifetimify_generics(&trait_func.sig.generics);
+
+            let res_generics = trait_gen.merge(func_gen);
+            utils::staticize(res_generics)
         };
 
-        let func_trait_bound = utils::make_exp_func_trait_bound(func_sig)?;
-        let func_boxed_ty = utils::make_boxed_exp_func(func_sig)?;
+        let func_trait_bound = utils::make_exp_func_trait_bound(cx, trait_func)?;
+        let func_boxed_ty = utils::make_boxed_exp_func(cx, trait_func)?;
 
-        let call_asyncness = func_sig.asyncness;
-        let call_awaiting = if func_sig.asyncness.is_some() {
+        let call_asyncness = trait_func.sig.asyncness;
+        let call_awaiting = if trait_func.sig.asyncness.is_some() {
             Some((Default::default(), Default::default()))
         } else {
             None
         };
-        let call_generics = utils::lifetimify_generics(&func_sig.generics);
-        let call_args = func_sig
+        let call_generics = utils::lifetimify_generics(&trait_func.sig.generics);
+        let call_args = trait_func
+            .sig
             .inputs
             .clone()
             .into_iter()
-            .filter(|inp| matches!(inp, &FnArg::Typed(_)))
-            .collect();
-        let call_ret = func_sig.output.clone();
-        let call_inner_args = func_sig
+            .filter_map(|inp| match inp {
+                FnArg::Receiver(_) => None,
+                FnArg::Typed(pat) => Some(pat),
+            })
+            .map(|mut pat| {
+                utils::deselfify_type(cx, &mut *pat.ty)?;
+                Ok::<_, syn::Error>(FnArg::Typed(pat))
+            })
+            .collect::<Result<_, _>>()?;
+        let call_ret = make_action_call_func_ret(trait_func)?;
+        let call_pass_args = trait_func
+            .sig
             .inputs
             .iter()
             .filter_map(|arg| match arg {
@@ -92,7 +104,7 @@ impl Action {
             call_generics,
             call_args,
             call_ret,
-            call_inner_args,
+            call_pass_args,
             phantom,
         })
     }
@@ -114,7 +126,7 @@ impl ToTokens for Action {
             self.call_generics.split_for_impl();
         let call_args = &self.call_args;
         let call_ret = &self.call_ret;
-        let call_inner_args = &self.call_inner_args;
+        let call_pass_args = &self.call_pass_args;
         let (phantom_def, phantom_init) = match &self.phantom {
             None => (None, None),
             Some((ident, ty)) => (
@@ -145,7 +157,7 @@ impl ToTokens for Action {
 
                 #call_asyncness fn call #call_ty_generics (&self, #call_args) #call_ret #call_where_clause {
                     self.func
-                        .call((#(#call_inner_args,)*))
+                        .call((#(#call_pass_args,)*))
                         #call_awaiting
                 }
             }
@@ -156,13 +168,14 @@ impl ToTokens for Action {
     }
 }
 
+#[derive(Debug)]
 pub struct ActionCollection {
     pub ident: Ident,
 }
 
 impl ActionCollection {
-    pub fn parse(cx: &Context) -> Result<Self, syn::Error> {
-        let ident = utils::format_action_collection_ident(&cx.trait_def.ident);
+    pub fn from_ast(cx: &Context) -> Result<Self, syn::Error> {
+        let ident = utils::format_action_collection_ident(&cx.trait_ident);
         Ok(Self { ident })
     }
 }
