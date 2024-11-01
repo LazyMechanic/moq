@@ -1,14 +1,16 @@
 use crate::context::Context;
-use crate::symbols;
+use crate::{symbols, utils};
+use if_chain::if_chain;
 use itertools::Itertools;
-use quote::format_ident;
+use quote::{format_ident, quote};
 use std::borrow::Borrow;
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::{
-    parse_quote, Attribute, BoundLifetimes, FnArg, GenericArgument, GenericParam, Generics, Ident,
-    ImplItem, ItemTrait, Lifetime, Path, PathArguments, PathSegment, QSelf, ReturnType, Signature,
-    Token, TraitItem, TraitItemFn, Type, TypeParamBound, WhereClause, WherePredicate,
+    parse_quote, AngleBracketedGenericArguments, Attribute, BoundLifetimes, Expr, ExprLit, FnArg,
+    GenericArgument, GenericParam, Generics, Ident, ImplItem, ItemTrait, Lifetime, Lit, Meta,
+    MetaNameValue, Path, PathArguments, PathSegment, QSelf, ReturnType, Signature, Token,
+    TraitItem, TraitItemFn, Type, TypeParamBound, WhereClause, WherePredicate,
 };
 
 pub fn format_mock_ident(trait_ident: &Ident) -> Ident {
@@ -82,12 +84,66 @@ pub fn make_exp_func_trait_bound(
         ReturnType::Default => parse_quote! { () },
         ReturnType::Type(_, ty) => match &**ty {
             Type::ImplTrait(ty) => {
-                // TODO:
-                // - #[moq(return = "::path::to::Type")]
-                // - #[moq(return = ::path::to::Type)]
-                // - #[moq(return = ::path::to::Type<_>)]
+                let moq_attrs_iter = moqify_attrs(trait_func.attrs.iter());
                 let bounds = &ty.bounds;
-                parse_quote! { ::std::boxed::Box<dyn #bounds> }
+                // TODO: check count of identical attributes
+                let mut ret_ty: Type = parse_quote!( ::std::boxed::Box<dyn #bounds> );
+                for attr in moq_attrs_iter {
+                    let nested_list = attr.parse_args_with(
+                        Punctuated::<MetaNameValue, Token![,]>::parse_terminated,
+                    )?;
+                    for nested in nested_list {
+                        if nested.path == symbols::OUTPUT {
+                            // #[moq(return = "::path::to::Type")]
+                            // #[moq(return = "::path::to::Type<_>")]
+                            match nested.value {
+                                Expr::Lit(ExprLit {
+                                    lit: Lit::Str(lit), ..
+                                }) => {
+                                    let path: Path = lit.parse()?;
+                                    let last_segment = path.segments.last().ok_or_else(|| {
+                                        syn::Error::new_spanned(
+                                            &path.segments,
+                                            "last segment not found",
+                                        )
+                                    })?;
+
+                                    // #[moq(return = "::path::to::Type<_>")]
+                                    if_chain! {
+                                        if let PathArguments::AngleBracketed(args) = &last_segment.arguments;
+                                        if args.args.len() == 1;
+                                        if matches!(
+                                            args.args.first(),
+                                            Some(GenericArgument::Type(Type::Infer(_)))
+                                        );
+                                        then {
+                                            // ::path::to::Type<Box<dyn ...>>
+                                            let wrapper = {
+                                                let mut p = path.clone();
+                                                let last_segment =
+                                                    p.segments.last_mut().expect("already checked");
+                                                last_segment.arguments = PathArguments::None;
+                                                quote!{ #p }
+                                            };
+                                            ret_ty = parse_quote! { #wrapper<#ret_ty> };
+                                        } else {
+                                            ret_ty = parse_quote! { #path };
+                                        }
+                                    }
+                                }
+                                other => {
+                                    return Err(syn::Error::new_spanned(
+                                        other,
+                                        "unsupported attribute value format",
+                                    ))
+                                }
+                            }
+                        } else {
+                            return Err(syn::Error::new_spanned(attr, "unsupported attribute"));
+                        }
+                    }
+                }
+                ret_ty
             }
             other => other.clone(),
         },
@@ -122,14 +178,67 @@ pub fn make_action_call_func_ret(trait_func: &TraitItemFn) -> Result<ReturnType,
         ReturnType::Default => Ok(ReturnType::Default),
         ReturnType::Type(_, ty) => match &**ty {
             Type::ImplTrait(ty) => {
-                // TODO:
-                // - #[moq(return = "::path::to::Type")]
-                // - #[moq(return = ::path::to::Type)]
-                // - #[moq(return = ::path::to::Type<_>)]
+                let moq_attrs_iter = moqify_attrs(trait_func.attrs.iter());
                 let bounds = &ty.bounds;
-                let mut ty: Type = parse_quote! { ::std::boxed::Box<dyn #bounds> };
-                deanonymize_lifetimes_type(&mut ty)?;
-                Ok(ReturnType::Type(Default::default(), Box::new(ty)))
+                // TODO: check count of identical attributes
+                let mut ret_ty: Type = parse_quote!( ::std::boxed::Box<dyn #bounds> );
+                for attr in moq_attrs_iter {
+                    let nested_list = attr.parse_args_with(
+                        Punctuated::<MetaNameValue, Token![,]>::parse_terminated,
+                    )?;
+                    for nested in nested_list {
+                        if nested.path == symbols::OUTPUT {
+                            // #[moq(return = "::path::to::Type")]
+                            // #[moq(return = "::path::to::Type<_>")]
+                            match nested.value {
+                                Expr::Lit(ExprLit {
+                                    lit: Lit::Str(lit), ..
+                                }) => {
+                                    let path: Path = lit.parse()?;
+                                    let last_segment = path.segments.last().ok_or_else(|| {
+                                        syn::Error::new_spanned(
+                                            &path.segments,
+                                            "last segment not found",
+                                        )
+                                    })?;
+
+                                    // #[moq(return = "::path::to::Type<_>")]
+                                    if_chain! {
+                                        if let PathArguments::AngleBracketed(args) = &last_segment.arguments;
+                                        if args.args.len() == 1;
+                                        if matches!(
+                                            args.args.first(),
+                                            Some(GenericArgument::Type(Type::Infer(_)))
+                                        );
+                                        then {
+                                            // ::path::to::Type<Box<dyn ...>>
+                                            let wrapper = {
+                                                let mut p = path.clone();
+                                                let last_segment =
+                                                    p.segments.last_mut().expect("already checked");
+                                                last_segment.arguments = PathArguments::None;
+                                                quote!{ #p }
+                                            };
+                                            ret_ty = parse_quote! { #wrapper<#ret_ty> };
+                                        } else {
+                                            ret_ty = parse_quote! { #path };
+                                        }
+                                    }
+                                }
+                                other => {
+                                    return Err(syn::Error::new_spanned(
+                                        other,
+                                        "unsupported attribute value format",
+                                    ))
+                                }
+                            }
+                        } else {
+                            return Err(syn::Error::new_spanned(attr, "unsupported attribute"));
+                        }
+                    }
+                }
+                deanonymize_lifetimes_type(&mut ret_ty)?;
+                Ok(ReturnType::Type(Default::default(), Box::new(ret_ty)))
             }
             other => {
                 let mut ty = other.clone();

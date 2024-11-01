@@ -14,6 +14,7 @@ define_symbols! {
     // Flags
     DEFAULT => "default",
     DEFAULT_WITH => "default_with",
+    OUTPUT => "output",
 }
 
 #[derive(Copy, Clone)]

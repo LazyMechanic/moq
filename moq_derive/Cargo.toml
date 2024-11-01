@@ -17,6 +17,7 @@ edition = "2021"
 proc-macro = true
 
 [dependencies]
+if_chain = "1.0"
 itertools = "0.13"
 proc-macro2 = "1.0"
 proc-macro2-diagnostics = "0.10"

@@ -230,12 +230,7 @@ fn trait_const(trait_cst: &TraitItemConst) -> Result<ImplItemConst, syn::Error> 
                 expr = Some(nested.value);
             } else if nested.path == symbols::DEFAULT_WITH {
                 // #[moq(default_with = "::path::to::func")]
-                // #[moq(default_with = ::path::to::func)]
                 match nested.value {
-                    Expr::Path(path) => {
-                        let fn_path = path.path;
-                        expr = Some(parse_quote!( #fn_path() ));
-                    }
                     Expr::Lit(ExprLit {
                         lit: Lit::Str(lit), ..
                     }) => {
@@ -290,12 +285,7 @@ fn trait_type(trait_ty: &TraitItemType) -> Result<ImplItemType, syn::Error> {
         for nested in nested_list {
             if nested.path == symbols::DEFAULT {
                 // #[moq(default = "::path::to::Type")]
-                // #[moq(default = ::path::to::Type)]
                 match nested.value {
-                    Expr::Path(path) => {
-                        let ty_path = path.path;
-                        ty = Some(parse_quote!( #ty_path ));
-                    }
                     Expr::Lit(ExprLit {
                         lit: Lit::Str(lit), ..
                     }) => {
