@@ -7,8 +7,8 @@ use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::{
     parse_quote, Attribute, FnArg, GenericParam, Generics, Ident, ImplItem, ImplItemConst,
-    ImplItemMethod, ImplItemType, ItemImpl, ItemStruct, Pat, Path, Token, TraitItem,
-    TraitItemConst, TraitItemMethod, TraitItemType, Type, Visibility, WhereClause,
+    ImplItemFn, ImplItemType, ItemImpl, ItemStruct, Pat, Path, Token, TraitItem, TraitItemConst,
+    TraitItemFn, TraitItemType, Type, Visibility, WhereClause,
 };
 
 pub struct Mock {
@@ -144,15 +144,15 @@ impl ToTokens for Mock {
 
 fn filter_map_exp_func(cx: &Context, item: &TraitItem) -> Option<Result<ImplItem, syn::Error>> {
     match item {
-        TraitItem::Method(item) => match exp_func(cx, item) {
-            Ok(ok) => Some(Ok(ImplItem::Method(ok))),
+        TraitItem::Fn(item) => match exp_func(cx, item) {
+            Ok(ok) => Some(Ok(ImplItem::Fn(ok))),
             Err(err) => Some(Err(err)),
         },
         _ => None,
     }
 }
 
-fn exp_func(cx: &Context, func: &TraitItemMethod) -> Result<ImplItemMethod, syn::Error> {
+fn exp_func(cx: &Context, func: &TraitItemFn) -> Result<ImplItemFn, syn::Error> {
     let action_path: Path = {
         let action_generics = {
             let trait_gen = utils::delifetimify_generics(&cx.trait_def.generics);
@@ -206,8 +206,8 @@ fn exp_func(cx: &Context, func: &TraitItemMethod) -> Result<ImplItemMethod, syn:
 
 fn filter_map_trait_item(cx: &Context, item: &TraitItem) -> Option<Result<ImplItem, syn::Error>> {
     match item {
-        TraitItem::Method(item) => match trait_func(cx, item) {
-            Ok(ok) => Some(Ok(ImplItem::Method(ok))),
+        TraitItem::Fn(item) => match trait_func(cx, item) {
+            Ok(ok) => Some(Ok(ImplItem::Fn(ok))),
             Err(err) => Some(Err(err)),
         },
         TraitItem::Const(item) => Some(Ok(ImplItem::Const(trait_const(item)?))),
@@ -223,6 +223,7 @@ fn trait_const(cst: &TraitItemConst) -> Option<ImplItemConst> {
         defaultness: None,
         const_token: Default::default(),
         ident: cst.ident.clone(),
+        generics: Default::default(),
         colon_token: Default::default(),
         ty: cst.ty.clone(),
         eq_token: Default::default(),
@@ -247,7 +248,7 @@ fn trait_type(ty: &TraitItemType) -> Option<ImplItemType> {
     Some(ty)
 }
 
-fn trait_func(cx: &Context, func: &TraitItemMethod) -> Result<ImplItemMethod, syn::Error> {
+fn trait_func(cx: &Context, func: &TraitItemFn) -> Result<ImplItemFn, syn::Error> {
     let func_ident = &func.sig.ident;
     let constness = func.sig.constness;
     let asyncness = func.sig.asyncness;

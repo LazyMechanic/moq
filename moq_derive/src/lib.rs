@@ -1,15 +1,12 @@
 mod action;
-mod automock;
+mod automock_macro;
 mod context;
 mod mock;
 mod symbols;
 mod utils;
 
-use automock::Automock;
-
+use crate::automock_macro::automock_impl;
 use proc_macro::TokenStream;
-use quote::quote;
-use syn::parse_macro_input;
 
 /// Macro that provides mock struct generating that implements trait
 ///
@@ -37,8 +34,9 @@ use syn::parse_macro_input;
 /// }
 /// ```
 #[proc_macro_attribute]
-pub fn automock(_args: TokenStream, input: TokenStream) -> TokenStream {
-    let p = parse_macro_input!(input as Automock);
-    let output = quote! { #p };
-    output.into()
+pub fn automock(args: TokenStream, input: TokenStream) -> TokenStream {
+    match automock_impl(args.into(), input.into()) {
+        Ok(tokens) => tokens.into(),
+        Err(diag) => diag.emit_as_expr_tokens().into(),
+    }
 }

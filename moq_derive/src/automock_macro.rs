@@ -1,19 +1,30 @@
 use crate::action::{Action, ActionCollection};
 use crate::context::Context;
 use crate::mock::Mock;
+use proc_macro2_diagnostics::Diagnostic;
 
-use quote::ToTokens;
+use quote::{quote, ToTokens};
 use syn::parse::{Parse, ParseStream};
 use syn::{ItemTrait, TraitItem};
 
-pub struct Automock {
+pub fn automock_impl(
+    _args: proc_macro2::TokenStream,
+    input: proc_macro2::TokenStream,
+) -> Result<proc_macro2::TokenStream, Diagnostic> {
+    let p = syn::parse2::<AutomockMacro>(input)?;
+    let output = quote! { #p };
+
+    Ok(output)
+}
+
+pub struct AutomockMacro {
     trait_def: ItemTrait,
     actions_def: ActionCollection,
     actions: Vec<Action>,
     mock: Mock,
 }
 
-impl Parse for Automock {
+impl Parse for AutomockMacro {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let cx = Context::parse(input)?;
         let actions_def = ActionCollection::parse(&cx)?;
@@ -22,7 +33,7 @@ impl Parse for Automock {
             .items
             .iter()
             .filter_map(|item| match item {
-                TraitItem::Method(item) => Some(&item.sig),
+                TraitItem::Fn(item) => Some(&item.sig),
                 _ => None,
             })
             .map(|sig| Action::parse(&cx, sig))
@@ -38,7 +49,7 @@ impl Parse for Automock {
     }
 }
 
-impl ToTokens for Automock {
+impl ToTokens for AutomockMacro {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         self.trait_def.to_tokens(tokens);
         self.actions_def.to_tokens(tokens);

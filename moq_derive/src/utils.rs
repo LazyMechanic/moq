@@ -111,23 +111,23 @@ pub fn demoqify(mut trait_def: ItemTrait) -> ItemTrait {
                 item.attrs = item
                     .attrs
                     .into_iter()
-                    .filter(|attr| attr.path != symbols::MOQ)
+                    .filter(|attr| attr.path() != symbols::MOQ)
                     .collect();
                 TraitItem::Const(item)
             }
-            TraitItem::Method(mut item) => {
+            TraitItem::Fn(mut item) => {
                 item.attrs = item
                     .attrs
                     .into_iter()
-                    .filter(|attr| attr.path != symbols::MOQ)
+                    .filter(|attr| attr.path() != symbols::MOQ)
                     .collect();
-                TraitItem::Method(item)
+                TraitItem::Fn(item)
             }
             TraitItem::Type(mut item) => {
                 item.attrs = item
                     .attrs
                     .into_iter()
-                    .filter(|attr| attr.path != symbols::MOQ)
+                    .filter(|attr| attr.path() != symbols::MOQ)
                     .collect();
                 TraitItem::Type(item)
             }
@@ -135,7 +135,7 @@ pub fn demoqify(mut trait_def: ItemTrait) -> ItemTrait {
                 item.attrs = item
                     .attrs
                     .into_iter()
-                    .filter(|attr| attr.path != symbols::MOQ)
+                    .filter(|attr| attr.path() != symbols::MOQ)
                     .collect();
                 TraitItem::Macro(item)
             }
@@ -169,7 +169,7 @@ pub fn delifetimify_generics(gen: &Generics) -> Generics {
                     Some(WherePredicate::Type(ty))
                 }
                 WherePredicate::Lifetime(_) => None,
-                x @ WherePredicate::Eq(_) => Some(x),
+                _ => None,
             })
             .collect();
         wc
@@ -376,7 +376,7 @@ pub fn deselfify_type(
                                     mock_ident,
                                     mock_generics,
                                 )?,
-                                GenericArgument::Binding(b) => deselfify_type(
+                                GenericArgument::AssocType(b) => deselfify_type(
                                     &mut b.ty,
                                     trait_ident,
                                     trait_generics,
@@ -448,7 +448,7 @@ pub fn deselfify_type(
                                             mock_ident,
                                             mock_generics,
                                         )?,
-                                        GenericArgument::Binding(b) => deselfify_type(
+                                        GenericArgument::AssocType(b) => deselfify_type(
                                             &mut b.ty,
                                             trait_ident,
                                             trait_generics,
@@ -492,6 +492,59 @@ pub fn deselfify_type(
         }
         Type::Infer(_) => { /* do nothing */ }
         Type::Never(_) => { /* do nothing */ }
+        Type::ImplTrait(ty) => {
+            for p in &mut ty.bounds {
+                if let TypeParamBound::Trait(tr) = p {
+                    for seg in &mut tr.path.segments {
+                        match &mut seg.arguments {
+                            PathArguments::None => { /* do nothing */ }
+                            PathArguments::AngleBracketed(arg) => {
+                                for arg in &mut arg.args {
+                                    match arg {
+                                        GenericArgument::Type(ty) => deselfify_type(
+                                            ty,
+                                            trait_ident,
+                                            trait_generics,
+                                            mock_ident,
+                                            mock_generics,
+                                        )?,
+                                        GenericArgument::AssocType(b) => deselfify_type(
+                                            &mut b.ty,
+                                            trait_ident,
+                                            trait_generics,
+                                            mock_ident,
+                                            mock_generics,
+                                        )?,
+                                        _ => { /* do nothing */ }
+                                    }
+                                }
+                            }
+                            PathArguments::Parenthesized(arg) => {
+                                for inp in &mut arg.inputs {
+                                    deselfify_type(
+                                        inp,
+                                        trait_ident,
+                                        trait_generics,
+                                        mock_ident,
+                                        mock_generics,
+                                    )?;
+                                }
+
+                                if let ReturnType::Type(_, ty) = &mut arg.output {
+                                    deselfify_type(
+                                        &mut **ty,
+                                        trait_ident,
+                                        trait_generics,
+                                        mock_ident,
+                                        mock_generics,
+                                    )?;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
         x => {
             return Err(syn::Error::new(
                 x.span(),
@@ -574,12 +627,32 @@ fn deanonymize_lifetimes_type(ty: &mut Type) -> Result<(), syn::Error> {
                 match p {
                     TypeParamBound::Trait(tr) => deanonymize_lifetimes_path(&mut tr.path)?,
                     TypeParamBound::Lifetime(lt) => deanonymize_lifetime(lt),
+                    other => {
+                        return Err(syn::Error::new_spanned(
+                            other,
+                            "unsupported type param bound",
+                        ))
+                    }
                 }
             }
         }
         Type::Tuple(ty) => {
             for ty in &mut ty.elems {
                 deanonymize_lifetimes_type(ty)?;
+            }
+        }
+        Type::ImplTrait(ty) => {
+            for p in &mut ty.bounds {
+                match p {
+                    TypeParamBound::Trait(tr) => deanonymize_lifetimes_path(&mut tr.path)?,
+                    TypeParamBound::Lifetime(lt) => deanonymize_lifetime(lt),
+                    other => {
+                        return Err(syn::Error::new_spanned(
+                            other,
+                            "unsupported type param bound",
+                        ))
+                    }
+                }
             }
         }
         x => {

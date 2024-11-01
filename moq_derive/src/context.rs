@@ -1,10 +1,11 @@
 use crate::{symbols, utils};
 
 use syn::parse::{Parse, ParseStream};
+use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::{
-    parse_quote, Attribute, FnArg, Generics, Ident, ItemTrait, Lit, Meta, NestedMeta, Path,
-    ReturnType, TraitItem, TraitItemConst, TraitItemMethod, TraitItemType, Type,
+    parse_quote, Attribute, Expr, ExprLit, FnArg, Generics, Ident, ItemTrait, Lit, MetaNameValue,
+    Path, ReturnType, Token, TraitItem, TraitItemConst, TraitItemFn, TraitItemType,
 };
 
 pub struct Context {
@@ -62,11 +63,11 @@ where
     items
         .into_iter()
         .map(|item| match item {
-            TraitItem::Method(item) => {
+            TraitItem::Fn(item) => {
                 let item = apply_moq_attr_method(item)?;
                 let item =
                     deselfify_method(item, trait_ident, trait_generics, mock_ident, mock_generics)?;
-                Ok(TraitItem::Method(item))
+                Ok(TraitItem::Fn(item))
             }
             TraitItem::Const(item) => Ok(TraitItem::Const(apply_moq_attr_const(item)?)),
             TraitItem::Type(item) => Ok(TraitItem::Type(apply_moq_attr_type(item)?)),
@@ -79,80 +80,53 @@ fn apply_moq_attr_const(mut item: TraitItemConst) -> Result<TraitItemConst, syn:
     let (moq_attrs, other_attrs): (Vec<Attribute>, Vec<Attribute>) = item
         .attrs
         .into_iter()
-        .partition(|attr| attr.path == symbols::MOQ);
+        .partition(|attr| attr.path() == symbols::MOQ);
     item.attrs = other_attrs;
 
     for attr in moq_attrs {
-        match attr.parse_meta()? {
-            Meta::List(meta) => {
-                for meta in meta.nested {
-                    match meta {
-                        NestedMeta::Meta(meta) => {
-                            let meta_ident = meta.path().get_ident().ok_or_else(|| {
-                                syn::Error::new_spanned(&meta, "missing identifier")
-                            })?;
-
-                            match meta_ident {
-                                x if x == symbols::DEFAULT => match meta {
-                                    Meta::NameValue(meta) => {
-                                        let val = meta.lit;
-                                        let expr = parse_quote! { #val };
-                                        item.default = Some((Default::default(), expr));
-                                    }
-                                    meta => {
-                                        return Err(syn::Error::new_spanned(
-                                            meta,
-                                            "unsupported attribute",
-                                        ))
-                                    }
-                                },
-                                x if x == symbols::DEFAULT_WITH => match meta {
-                                    Meta::NameValue(meta) => {
-                                        let val = match meta.lit {
-                                            Lit::Str(s) => s.value(),
-                                            other => {
-                                                return Err(syn::Error::new_spanned(
-                                                    other,
-                                                    "unsupported value type",
-                                                ))
-                                            }
-                                        };
-                                        let fn_path: Path = syn::parse_str(&val)?;
-                                        let expr = parse_quote! { #fn_path() };
-                                        item.default = Some((Default::default(), expr));
-                                    }
-                                    meta => {
-                                        return Err(syn::Error::new_spanned(
-                                            meta,
-                                            "unsupported attribute",
-                                        ))
-                                    }
-                                },
-                                other => {
-                                    return Err(syn::Error::new_spanned(
-                                        other,
-                                        "unsupported attribute",
-                                    ))
-                                }
-                            }
-                        }
-                        meta => return Err(syn::Error::new_spanned(meta, "unsupported attribute")),
+        let nested_list =
+            attr.parse_args_with(Punctuated::<MetaNameValue, Token![,]>::parse_terminated)?;
+        for nested in nested_list {
+            if nested.path == symbols::DEFAULT {
+                // #[moq(default = "123")]
+                item.default = Some((Default::default(), nested.value));
+            } else if nested.path == symbols::DEFAULT_WITH {
+                // #[moq(default_with = "::path::to::func")]
+                // #[moq(default_with = ::path::to::func)]
+                let expr = match nested.value {
+                    Expr::Path(path) => {
+                        let fn_path = path.path;
+                        parse_quote!( #fn_path() )
                     }
-                }
+                    Expr::Lit(ExprLit {
+                        lit: Lit::Str(lit), ..
+                    }) => {
+                        let fn_path = lit.parse::<Path>()?;
+                        parse_quote!( #fn_path() )
+                    }
+                    other => {
+                        return Err(syn::Error::new_spanned(
+                            other,
+                            "unsupported attribute value format",
+                        ))
+                    }
+                };
+                item.default = Some((Default::default(), expr));
+            } else {
+                return Err(syn::Error::new_spanned(nested, "unsupported attribute"));
             }
-            meta => return Err(syn::Error::new_spanned(meta, "unsupported attribute")),
         }
     }
 
     Ok(item)
 }
 
-fn apply_moq_attr_method(mut item: TraitItemMethod) -> Result<TraitItemMethod, syn::Error> {
+fn apply_moq_attr_method(mut item: TraitItemFn) -> Result<TraitItemFn, syn::Error> {
     let item_span = item.span();
     let (moq_attrs, other_attrs): (Vec<Attribute>, Vec<Attribute>) = item
         .attrs
         .into_iter()
-        .partition(|attr| attr.path == symbols::MOQ);
+        .partition(|attr| attr.path() == symbols::MOQ);
     item.attrs = other_attrs;
 
     // TODO: add supporting static func
@@ -172,43 +146,22 @@ fn apply_moq_attr_method(mut item: TraitItemMethod) -> Result<TraitItemMethod, s
     let def_block = item.default.take();
 
     for attr in moq_attrs {
-        match attr.parse_meta()? {
-            Meta::List(meta) => {
-                for meta in meta.nested {
-                    match meta {
-                        NestedMeta::Meta(meta) => {
-                            let meta_ident = meta.path().get_ident().ok_or_else(|| {
-                                syn::Error::new_spanned(&meta, "missing identifier")
-                            })?;
-
-                            match meta_ident {
-                                x if x == symbols::DEFAULT => match meta {
-                                    Meta::Path(path) => {
-                                        match &def_block {
-                                            Some(def_block) => item.default = Some(def_block.clone()),
-                                            None => return Err(syn::Error::new_spanned(path, format!("attribute '{}' cannot be used if there is no default impl of function", symbols::DEFAULT))),
-                                        }
-                                    }
-                                    meta => {
-                                        return Err(syn::Error::new_spanned(
-                                            meta,
-                                            "unsupported attribute",
-                                        ))
-                                    }
-                                },
-                                other => {
-                                    return Err(syn::Error::new_spanned(
-                                        other,
-                                        "unsupported attribute",
-                                    ))
-                                }
-                            }
-                        }
-                        meta => return Err(syn::Error::new_spanned(meta, "unsupported attribute")),
+        let nested_list = attr.parse_args_with(Punctuated::<Path, Token![,]>::parse_terminated)?;
+        for nested in nested_list {
+            if nested == symbols::DEFAULT {
+                // #[moq(default)]
+                match &def_block {
+                    Some(def_block) => item.default = Some(def_block.clone()),
+                    None => {
+                        return Err(syn::Error::new_spanned(
+                            nested,
+                            "attribute cannot be used if there is no default impl of function",
+                        ))
                     }
                 }
+            } else {
+                return Err(syn::Error::new_spanned(nested, "unsupported attribute"));
             }
-            meta => return Err(syn::Error::new_spanned(meta, "unsupported attribute")),
         }
     }
 
@@ -216,12 +169,12 @@ fn apply_moq_attr_method(mut item: TraitItemMethod) -> Result<TraitItemMethod, s
 }
 
 fn deselfify_method(
-    mut item: TraitItemMethod,
+    mut item: TraitItemFn,
     trait_ident: &Ident,
     trait_generics: &Generics,
     mock_ident: &Ident,
     mock_generics: &Generics,
-) -> Result<TraitItemMethod, syn::Error> {
+) -> Result<TraitItemFn, syn::Error> {
     for inp in &mut item.sig.inputs {
         match inp {
             FnArg::Receiver(_) => {}
@@ -254,54 +207,36 @@ fn apply_moq_attr_type(mut item: TraitItemType) -> Result<TraitItemType, syn::Er
     let (moq_attrs, other_attrs): (Vec<Attribute>, Vec<Attribute>) = item
         .attrs
         .into_iter()
-        .partition(|attr| attr.path == symbols::MOQ);
+        .partition(|attr| attr.path() == symbols::MOQ);
     item.attrs = other_attrs;
 
     for attr in moq_attrs {
-        match attr.parse_meta()? {
-            Meta::List(meta) => {
-                for meta in meta.nested {
-                    match meta {
-                        NestedMeta::Meta(meta) => {
-                            let meta_ident = meta.path().get_ident().ok_or_else(|| {
-                                syn::Error::new_spanned(&meta, "missing identifier")
-                            })?;
-
-                            match meta_ident {
-                                x if x == symbols::DEFAULT => match meta {
-                                    Meta::NameValue(meta) => {
-                                        let val = match meta.lit {
-                                            Lit::Str(s) => s.value(),
-                                            other => {
-                                                return Err(syn::Error::new_spanned(
-                                                    other,
-                                                    "unsupported value type",
-                                                ))
-                                            }
-                                        };
-                                        let ty: Type = syn::parse_str(&val)?;
-                                        item.default = Some((Default::default(), ty));
-                                    }
-                                    meta => {
-                                        return Err(syn::Error::new_spanned(
-                                            meta,
-                                            "unsupported attribute",
-                                        ))
-                                    }
-                                },
-                                other => {
-                                    return Err(syn::Error::new_spanned(
-                                        other,
-                                        "unsupported attribute",
-                                    ))
-                                }
-                            }
-                        }
-                        meta => return Err(syn::Error::new_spanned(meta, "unsupported attribute")),
+        let nested_list =
+            attr.parse_args_with(Punctuated::<MetaNameValue, Token![,]>::parse_terminated)?;
+        for nested in nested_list {
+            if nested.path == symbols::DEFAULT {
+                // #[moq(default = "::path::to::Type")]
+                // #[moq(default = ::path::to::Type)]
+                let ty = match nested.value {
+                    Expr::Path(path) => {
+                        let ty_path = path.path;
+                        parse_quote!( #ty_path )
                     }
-                }
+                    Expr::Lit(ExprLit {
+                        lit: Lit::Str(lit), ..
+                    }) => lit.parse()?,
+                    other => {
+                        return Err(syn::Error::new_spanned(
+                            other,
+                            "unsupported attribute value format",
+                        ))
+                    }
+                };
+
+                item.default = Some((Default::default(), ty));
+            } else {
+                return Err(syn::Error::new_spanned(nested, "unsupported attribute"));
             }
-            meta => return Err(syn::Error::new_spanned(meta, "unsupported attribute")),
         }
     }
 
