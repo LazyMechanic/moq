@@ -1,3 +1,6 @@
+use std::future::Future;
+use std::pin::Pin;
+
 #[test]
 fn test1() {
     trait DummyTrait {
@@ -27,11 +30,6 @@ fn test1() {
 fn test2() {
     trait DummyTrait {
         fn dummy(&self) -> i32;
-    }
-    impl DummyTrait for Box<dyn DummyTrait> {
-        fn dummy(&self) -> i32 {
-            (**self).dummy()
-        }
     }
     impl DummyTrait for i32 {
         fn dummy(&self) -> i32 {
@@ -83,4 +81,19 @@ fn test3() {
 
     let m = TraitMock::new().expect_f(|| DummyWrapper(Box::new(42i32) as Box<dyn DummyTrait>));
     assert_eq!(m.f().dummy(), 42);
+}
+
+#[test]
+fn test4() {
+    #[moq::automock]
+    trait Trait {
+        #[moq(output = "Pin<_>")]
+        fn f<R>(&self) -> impl Future<Output = R>
+        where
+            R: 'static;
+    }
+
+    let m = TraitMock::new()
+        .expect_f(|| Box::pin(async { 42i32 }) as Pin<Box<dyn Future<Output = i32>>>);
+    let _ = m.f::<i32>();
 }
