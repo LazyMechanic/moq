@@ -160,6 +160,7 @@ fn exp_func(cx: &Context, trait_func: &TraitItemFn) -> Result<ImplItemFn, syn::E
         let action_generics = {
             let trait_gen = utils::delifetimify_generics(&cx.trait_generics);
             let func_gen = utils::delifetimify_generics(&trait_func.sig.generics);
+
             let res_generics = trait_gen.merge(func_gen);
             utils::staticize(res_generics)
         };

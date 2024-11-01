@@ -1,5 +1,5 @@
 use crate::context::Context;
-use crate::{symbols, utils};
+use crate::symbols;
 use if_chain::if_chain;
 use itertools::Itertools;
 use quote::{format_ident, quote};
@@ -7,10 +7,10 @@ use std::borrow::Borrow;
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::{
-    parse_quote, AngleBracketedGenericArguments, Attribute, BoundLifetimes, Expr, ExprLit, FnArg,
-    GenericArgument, GenericParam, Generics, Ident, ImplItem, ItemTrait, Lifetime, Lit, Meta,
-    MetaNameValue, Path, PathArguments, PathSegment, QSelf, ReturnType, Signature, Token,
-    TraitItem, TraitItemFn, Type, TypeParamBound, WhereClause, WherePredicate,
+    parse_quote, Attribute, BoundLifetimes, Expr, ExprLit, FnArg, GenericArgument, GenericParam,
+    Generics, Ident, ImplItem, ItemTrait, Lifetime, Lit, MetaNameValue, Path, PathArguments,
+    PathSegment, QSelf, ReturnType, Token, TraitItem, TraitItemFn, Type, TypeParamBound,
+    WhereClause, WherePredicate,
 };
 
 pub fn format_mock_ident(trait_ident: &Ident) -> Ident {
@@ -71,17 +71,12 @@ pub fn make_exp_func_trait_bound(
         .cloned()
         .map(|mut ty| {
             deanonymize_lifetimes_type(&mut ty)?;
-            Ok::<_, syn::Error>(ty)
-        })
-        .map(|mut maybe_ty| {
-            let mut ty = maybe_ty?;
             deselfify_type(cx, &mut ty)?;
             Ok::<_, syn::Error>(ty)
         })
         .collect::<Result<Vec<_>, _>>()?;
 
     let ret_ty = make_action_call_func_ret(cx, trait_func)?.unwrap_or(parse_quote! { () });
-
     let lts_bounds: Option<BoundLifetimes> = if lts.is_empty() {
         None
     } else {
@@ -302,37 +297,42 @@ pub fn lifetimify_generics(gen: &Generics) -> Generics {
 
 pub trait MergeGenerics {
     fn merge(self, other: Generics) -> Generics;
+    fn merge_with(&mut self, other: Generics) -> &mut Self;
 }
 
 impl MergeGenerics for Generics {
     fn merge(self, other: Generics) -> Generics {
         merge_generics(self, other)
     }
+
+    fn merge_with(&mut self, other: Generics) -> &mut Self {
+        merge_generics_inplace(self, other);
+        self
+    }
 }
 
 /// Merge two generics into one
-pub fn merge_generics(left: Generics, right: Generics) -> Generics {
-    let params = left.params.into_iter().chain(right.params).collect();
+pub fn merge_generics(mut left: Generics, right: Generics) -> Generics {
+    merge_generics_inplace(&mut left, right);
+    left
+}
 
-    let where_clause = match (left.where_clause, right.where_clause) {
-        (Some(trait_where_clause), Some(func_where_clause)) => {
-            let mut res_where_clause = trait_where_clause;
-            res_where_clause
+/// Merge two generics inplace into one
+pub fn merge_generics_inplace(dst: &mut Generics, other: Generics) {
+    dst.params.extend(other.params.into_iter());
+    match (&mut dst.where_clause, other.where_clause) {
+        (Some(dst_where_clause), Some(other_where_clause)) => {
+            dst_where_clause
                 .predicates
-                .extend(func_where_clause.predicates);
-            Some(res_where_clause)
+                .extend(other_where_clause.predicates);
         }
-        (Some(trait_where_clause), None) => Some(trait_where_clause),
-        (None, Some(func_where_clause)) => Some(func_where_clause),
-        (None, None) => None,
-    };
-
-    Generics {
-        lt_token: Some(<Token![<]>::default()),
-        params,
-        gt_token: Some(<Token![>]>::default()),
-        where_clause,
+        (Some(_), None) => { /* do nothing */ }
+        (None, Some(other_where_clause)) => dst.where_clause = Some(other_where_clause),
+        (None, None) => { /* do nothing */ }
     }
+
+    dst.lt_token = dst.lt_token.or(other.lt_token);
+    dst.gt_token = dst.gt_token.or(other.gt_token);
 }
 
 /// Applies `T: 'static` bound on every generic parameter

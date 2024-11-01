@@ -36,7 +36,6 @@ impl Action {
             let res_generics = trait_gen.merge(func_gen);
             utils::staticize(res_generics)
         };
-
         let func_trait_bound = utils::make_exp_func_trait_bound(cx, trait_func)?;
         let func_boxed_ty = utils::make_boxed_exp_func(cx, trait_func)?;
 

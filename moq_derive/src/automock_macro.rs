@@ -14,7 +14,6 @@ pub fn automock_impl(
 ) -> Result<proc_macro2::TokenStream, Diagnostic> {
     let p = syn::parse2::<AutomockMacro>(input)?;
     let output = quote! { #p };
-
     //panic!("{}", output.to_string());
 
     Ok(output)
