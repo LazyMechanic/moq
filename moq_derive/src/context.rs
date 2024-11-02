@@ -1,5 +1,8 @@
 use crate::utils;
+use std::collections::HashMap;
 
+use crate::action::Action;
+use crate::utils::GenericsExt;
 use syn::parse::Parse;
 use syn::{Attribute, Generics, Ident, ItemTrait, Token, TraitItem, Visibility};
 
@@ -29,7 +32,7 @@ impl Context {
         let trait_unsafety = trait_def.unsafety;
         let trait_items = trait_def.items;
         let mock_ident = utils::format_mock_ident(&trait_ident);
-        let mock_generics = utils::staticize(utils::delifetimify_generics(&trait_generics));
+        let mock_generics = trait_generics.clone().delifetimified().staticized();
 
         Self {
             trait_ident,

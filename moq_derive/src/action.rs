@@ -1,7 +1,7 @@
 use crate::context::Context;
 use crate::utils;
 
-use crate::utils::{make_action_call_func_ret, MergeGenerics};
+use crate::utils::{make_action_call_func_ret, GenericsExt};
 use proc_macro2::TokenStream;
 use quote::{quote, ToTokens};
 use syn::punctuated::Punctuated;
@@ -30,11 +30,10 @@ impl Action {
     pub fn from_ast(cx: &Context, trait_func: &TraitItemFn) -> Result<Self, syn::Error> {
         let self_ident = utils::format_action_ident(&cx.trait_ident, &trait_func.sig.ident);
         let self_generics = {
-            let trait_gen = utils::delifetimify_generics(&cx.trait_generics);
-            let func_gen = utils::delifetimify_generics(&trait_func.sig.generics);
+            let trait_gen = cx.trait_generics.clone().delifetimified();
+            let func_gen = trait_func.sig.generics.clone().delifetimified();
 
-            let res_generics = trait_gen.merge(func_gen);
-            utils::staticize(res_generics)
+            trait_gen.merged(func_gen).staticized()
         };
         let func_trait_bound = utils::make_exp_func_trait_bound(cx, trait_func)?;
         let func_boxed_ty = utils::make_boxed_exp_func(cx, trait_func)?;
@@ -45,7 +44,7 @@ impl Action {
         } else {
             None
         };
-        let call_generics = utils::lifetimify_generics(&trait_func.sig.generics);
+        let call_generics = trait_func.sig.generics.clone().lifetimified();
         let call_args = trait_func
             .sig
             .inputs

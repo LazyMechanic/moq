@@ -70,7 +70,6 @@ pub fn make_exp_func_trait_bound(
         })
         .cloned()
         .map(|mut ty| {
-            deanonymize_lifetimes_type(&mut ty)?;
             deselfify_type(cx, &mut ty)?;
             Ok::<_, syn::Error>(ty)
         })
@@ -166,13 +165,11 @@ pub fn make_action_call_func_ret(
                         }
                     }
                 }
-                deanonymize_lifetimes_type(&mut ret_ty)?;
                 deselfify_type(cx, &mut ret_ty)?;
                 Ok(Some(ret_ty))
             }
             other => {
                 let mut ret_ty = other.clone();
-                deanonymize_lifetimes_type(&mut ret_ty)?;
                 deselfify_type(cx, &mut ret_ty)?;
                 Ok(Some(ret_ty))
             }
@@ -229,16 +226,45 @@ where
         .filter(|attr| attr.borrow().path() != symbols::MOQ)
 }
 
-/// Removes lifetimes from generics
-pub fn delifetimify_generics(gen: &Generics) -> Generics {
-    let params = gen
-        .params
-        .iter()
-        .filter(|&p| !matches!(p, GenericParam::Lifetime(_)))
-        .cloned()
+/// Filters generics for lifetimes and returns new generics with only lifetimes
+pub fn lifetimify_generics(mut gen: Generics) -> Generics {
+    lifetimify_generics_inplace(&mut gen);
+    gen
+}
+
+pub fn lifetimify_generics_inplace(gen: &mut Generics) {
+    gen.params = std::mem::take(&mut gen.params)
+        .into_iter()
+        .filter(|p| matches!(p, GenericParam::Lifetime(_)))
         .collect();
 
-    let where_clause = gen.where_clause.clone().map(|mut wc| {
+    gen.where_clause = std::mem::take(&mut gen.where_clause).map(|mut wc| {
+        wc.predicates = wc
+            .predicates
+            .into_iter()
+            .filter_map(|pred| match pred {
+                x @ WherePredicate::Lifetime(_) => Some(x),
+                _ => None,
+            })
+            .collect();
+        wc
+    });
+}
+
+/// Removes lifetimes from generics
+pub fn delifetimify_generics(mut gen: Generics) -> Generics {
+    delifetimify_generics_inplace(&mut gen);
+    gen
+}
+
+/// Removes lifetimes from generics
+pub fn delifetimify_generics_inplace(gen: &mut Generics) {
+    gen.params = std::mem::take(&mut gen.params)
+        .into_iter()
+        .filter(|p| !matches!(p, GenericParam::Lifetime(_)))
+        .collect();
+
+    gen.where_clause = std::mem::take(&mut gen.where_clause).map(|mut wc| {
         wc.predicates = wc
             .predicates
             .into_iter()
@@ -257,56 +283,61 @@ pub fn delifetimify_generics(gen: &Generics) -> Generics {
             .collect();
         wc
     });
-
-    Generics {
-        lt_token: gen.lt_token,
-        params,
-        gt_token: gen.gt_token,
-        where_clause,
-    }
 }
 
-/// Filters generics for lifetimes and returns new generics with only lifetimes
-pub fn lifetimify_generics(gen: &Generics) -> Generics {
-    let params = gen
-        .params
-        .iter()
-        .filter(|&p| matches!(p, GenericParam::Lifetime(_)))
-        .cloned()
-        .collect();
-
-    let where_clause = gen.where_clause.clone().map(|mut wc| {
-        wc.predicates = wc
-            .predicates
-            .into_iter()
-            .filter_map(|pred| match pred {
-                x @ WherePredicate::Lifetime(_) => Some(x),
-                _ => None,
-            })
-            .collect();
-        wc
-    });
-
-    Generics {
-        lt_token: gen.lt_token,
-        params,
-        gt_token: gen.gt_token,
-        where_clause,
-    }
+pub trait GenericsExt {
+    /// Merge two generics into one
+    fn merged(self, other: Generics) -> Generics;
+    /// Merge two generics into one
+    fn merge(&mut self, other: Generics) -> &mut Self;
+    /// Filters generics for lifetimes and returns new generics with only lifetimes
+    fn lifetimified(self) -> Generics;
+    /// Filters generics for lifetimes and leaves generics only with lifetimes
+    fn lifetimify(&mut self) -> &mut Self;
+    /// Removes lifetimes from generics
+    fn delifetimified(self) -> Generics;
+    /// Removes lifetimes from generics
+    fn delifetimify(&mut self) -> &mut Self;
+    /// Applies `T: 'static` bound on every generic parameter
+    fn staticized(self) -> Generics;
+    /// Applies `T: 'static` bound on every generic parameter
+    fn staticize(&mut self) -> &mut Self;
 }
 
-pub trait MergeGenerics {
-    fn merge(self, other: Generics) -> Generics;
-    fn merge_with(&mut self, other: Generics) -> &mut Self;
-}
-
-impl MergeGenerics for Generics {
-    fn merge(self, other: Generics) -> Generics {
+impl GenericsExt for Generics {
+    fn merged(self, other: Generics) -> Generics {
         merge_generics(self, other)
     }
 
-    fn merge_with(&mut self, other: Generics) -> &mut Self {
+    fn merge(&mut self, other: Generics) -> &mut Self {
         merge_generics_inplace(self, other);
+        self
+    }
+
+    fn lifetimified(self) -> Generics {
+        lifetimify_generics(self)
+    }
+
+    fn lifetimify(&mut self) -> &mut Self {
+        lifetimify_generics_inplace(self);
+        self
+    }
+
+    fn delifetimified(self) -> Generics {
+        delifetimify_generics(self)
+    }
+
+    fn delifetimify(&mut self) -> &mut Self {
+        delifetimify_generics_inplace(self);
+        self
+    }
+
+    fn staticized(self) -> Generics {
+        staticize(self)
+    }
+
+    fn staticize(&mut self) -> &mut Self {
+        staticize_inplace(self);
         self
     }
 }
@@ -336,30 +367,24 @@ pub fn merge_generics_inplace(dst: &mut Generics, other: Generics) {
 }
 
 /// Applies `T: 'static` bound on every generic parameter
-pub fn staticize(generics: Generics) -> Generics {
-    let idents = generics
-        .params
-        .iter()
-        .filter_map(|p| match p {
-            GenericParam::Type(ty) => Some(&ty.ident),
-            _ => None,
-        })
-        .collect::<Vec<_>>();
+pub fn staticize(mut gen: Generics) -> Generics {
+    staticize_inplace(&mut gen);
+    gen
+}
 
-    let mut where_clause = generics.where_clause.unwrap_or(WhereClause {
+pub fn staticize_inplace(gen: &mut Generics) {
+    let ident_iter = gen.params.iter().filter_map(|p| match p {
+        GenericParam::Type(ty) => Some(&ty.ident),
+        _ => None,
+    });
+
+    let where_clause = gen.where_clause.get_or_insert(WhereClause {
         where_token: <Token![where]>::default(),
         predicates: Punctuated::default(),
     });
-    for ident in idents {
+    for ident in ident_iter {
         let p = parse_quote! { #ident: 'static };
         where_clause.predicates.push(p);
-    }
-
-    Generics {
-        lt_token: generics.lt_token,
-        params: generics.params,
-        gt_token: generics.gt_token,
-        where_clause: Some(where_clause),
     }
 }
 
@@ -553,116 +578,5 @@ pub fn deselfify_type(cx: &Context, ty: &mut Type) -> Result<(), syn::Error> {
             ))
         }
     }
-    Ok(())
-}
-
-/// Turns lifetime identifier `'_` to `'static`
-fn deanonymize_lifetime(lt: &mut Lifetime) {
-    if lt.ident == "_" {
-        lt.ident = format_ident!("static");
-    }
-}
-
-/// Turns lifetime identifier `'_` to `'static` on `Path`
-fn deanonymize_lifetimes_path(path: &mut Path) -> Result<(), syn::Error> {
-    for seg in &mut path.segments {
-        match &mut seg.arguments {
-            PathArguments::None => {}
-            PathArguments::AngleBracketed(arg) => {
-                for gen_arg in &mut arg.args {
-                    match gen_arg {
-                        GenericArgument::Lifetime(lt) => deanonymize_lifetime(lt),
-                        GenericArgument::Type(ty) => deanonymize_lifetimes_type(ty)?,
-                        _ => {}
-                    }
-                }
-            }
-            PathArguments::Parenthesized(arg) => {
-                if let ReturnType::Type(_, ty) = &mut arg.output {
-                    deanonymize_lifetimes_type(&mut *ty)?;
-                }
-
-                for inp_ty in &mut arg.inputs {
-                    deanonymize_lifetimes_type(inp_ty)?;
-                }
-            }
-        }
-    }
-
-    Ok(())
-}
-
-/// Turns lifetime identifier `'_` to `'static` on `Type`
-fn deanonymize_lifetimes_type(ty: &mut Type) -> Result<(), syn::Error> {
-    match ty {
-        Type::Array(ty) => deanonymize_lifetimes_type(&mut *ty.elem)?,
-        Type::BareFn(ty) => {
-            if let ReturnType::Type(_, ty) = &mut ty.output {
-                deanonymize_lifetimes_type(&mut *ty)?;
-            }
-            for inp_arg in &mut ty.inputs {
-                deanonymize_lifetimes_type(&mut inp_arg.ty)?;
-            }
-        }
-        Type::Group(ty) => deanonymize_lifetimes_type(&mut *ty.elem)?,
-        Type::Infer(_) => { /* there are no lifetimes */ }
-        Type::Never(_) => { /* there are no lifetimes */ }
-        Type::Paren(ty) => deanonymize_lifetimes_type(&mut *ty.elem)?,
-        Type::Path(ty) => {
-            if let Some(qself) = &mut ty.qself {
-                deanonymize_lifetimes_type(&mut qself.ty)?;
-            }
-
-            deanonymize_lifetimes_path(&mut ty.path)?;
-        }
-        Type::Ptr(ty) => deanonymize_lifetimes_type(&mut *ty.elem)?,
-        Type::Reference(ty) => {
-            deanonymize_lifetimes_type(&mut *ty.elem)?;
-            if let Some(lt) = &mut ty.lifetime {
-                deanonymize_lifetime(lt);
-            }
-        }
-        Type::Slice(ty) => deanonymize_lifetimes_type(&mut *ty.elem)?,
-        Type::TraitObject(ty) => {
-            for p in &mut ty.bounds {
-                match p {
-                    TypeParamBound::Trait(tr) => deanonymize_lifetimes_path(&mut tr.path)?,
-                    TypeParamBound::Lifetime(lt) => deanonymize_lifetime(lt),
-                    other => {
-                        return Err(syn::Error::new_spanned(
-                            other,
-                            "unsupported type param bound",
-                        ))
-                    }
-                }
-            }
-        }
-        Type::Tuple(ty) => {
-            for ty in &mut ty.elems {
-                deanonymize_lifetimes_type(ty)?;
-            }
-        }
-        Type::ImplTrait(ty) => {
-            for p in &mut ty.bounds {
-                match p {
-                    TypeParamBound::Trait(tr) => deanonymize_lifetimes_path(&mut tr.path)?,
-                    TypeParamBound::Lifetime(lt) => deanonymize_lifetime(lt),
-                    other => {
-                        return Err(syn::Error::new_spanned(
-                            other,
-                            "unsupported type param bound",
-                        ))
-                    }
-                }
-            }
-        }
-        x => {
-            return Err(syn::Error::new(
-                x.span(),
-                "unsupported type for deanonymize",
-            ))
-        }
-    }
-
     Ok(())
 }

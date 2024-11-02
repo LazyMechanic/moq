@@ -1,7 +1,7 @@
 use crate::context::Context;
 use crate::{symbols, utils};
 
-use crate::utils::{deselfify_impl_item, MergeGenerics};
+use crate::utils::{deselfify_impl_item, GenericsExt};
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote, ToTokens};
 use syn::punctuated::Punctuated;
@@ -158,11 +158,10 @@ fn filter_map_exp_func(
 fn exp_func(cx: &Context, trait_func: &TraitItemFn) -> Result<ImplItemFn, syn::Error> {
     let action_path: Path = {
         let action_generics = {
-            let trait_gen = utils::delifetimify_generics(&cx.trait_generics);
-            let func_gen = utils::delifetimify_generics(&trait_func.sig.generics);
+            let trait_gen = cx.trait_generics.clone().delifetimified();
+            let func_gen = trait_func.sig.generics.clone().delifetimified();
 
-            let res_generics = trait_gen.merge(func_gen);
-            utils::staticize(res_generics)
+            trait_gen.merged(func_gen).staticized()
         };
 
         let action_ident = utils::format_action_ident(&cx.trait_ident, &trait_func.sig.ident);
@@ -188,9 +187,14 @@ fn exp_func(cx: &Context, trait_func: &TraitItemFn) -> Result<ImplItemFn, syn::E
                 where_clause: Some(where_clause),
             }
         };
-        let func_gen = utils::delifetimify_generics(&trait_func.sig.generics);
-        let func_gen = utils::staticize(func_gen);
-        func_gen.merge(exp_func_generics)
+        let func_gen = trait_func
+            .sig
+            .generics
+            .clone()
+            .delifetimified()
+            .staticized();
+
+        func_gen.merged(exp_func_generics)
     };
     let (_exp_func_impl_generics, exp_func_ty_generics, exp_func_where_clause) =
         exp_func_generics.split_for_impl();
@@ -396,9 +400,9 @@ fn trait_func(cx: &Context, func: &TraitItemFn) -> Result<ImplItemFn, syn::Error
 fn trait_func_block(cx: &Context, func: &TraitItemFn) -> Result<Block, syn::Error> {
     let action_ident = utils::format_action_ident(&cx.trait_ident, &func.sig.ident);
     let call_generics = {
-        let trait_gen = utils::delifetimify_generics(&cx.trait_generics);
-        let func_gen = utils::delifetimify_generics(&func.sig.generics);
-        utils::merge_generics(trait_gen, func_gen)
+        let trait_gen = cx.trait_generics.clone().delifetimified();
+        let func_gen = func.sig.generics.clone().delifetimified();
+        trait_gen.merged(func_gen)
     };
     let (_impl_generics, ty_generics, _where_clause) = call_generics.split_for_impl();
     let awaiting = if func.sig.asyncness.is_some() {
