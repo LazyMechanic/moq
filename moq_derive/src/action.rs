@@ -52,13 +52,12 @@ impl Action {
             .into_iter()
             .filter_map(|inp| match inp {
                 FnArg::Receiver(_) => None,
-                FnArg::Typed(pat) => Some(pat),
+                FnArg::Typed(mut pat) => {
+                    pat.ty.deselfify(cx);
+                    Some(FnArg::Typed(pat))
+                }
             })
-            .map(|mut pat| {
-                pat.ty.deselfify(cx)?;
-                Ok::<_, syn::Error>(FnArg::Typed(pat))
-            })
-            .collect::<Result<_, _>>()?;
+            .collect();
         let call_ret = make_action_call_func_ret(cx, trait_func)?
             .map(|ty| parse_quote! { -> #ty })
             .unwrap_or(ReturnType::Default);

@@ -3,14 +3,16 @@ use crate::symbols;
 use if_chain::if_chain;
 use itertools::Itertools;
 use quote::{format_ident, quote};
-use replace_with::replace_with_or_abort;
+use replace_with::{replace_with_or_abort, replace_with_or_abort_and_return};
 use std::borrow::Borrow;
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
+use syn::visit_mut::VisitMut;
 use syn::{
-    parse_quote, Attribute, BoundLifetimes, Expr, ExprLit, FnArg, GenericArgument, GenericParam,
-    Generics, Ident, ImplItem, ItemTrait, Lit, MetaNameValue, Path, PathArguments, PathSegment,
-    QSelf, ReturnType, Token, TraitItem, TraitItemFn, Type, TypeParamBound, WhereClause,
+    parse_quote, visit_mut, AngleBracketedGenericArguments, Attribute, Block, BoundLifetimes, Expr,
+    ExprLit, FnArg, GenericArgument, GenericParam, Generics, Ident, ImplItem, ItemTrait, Lit,
+    MetaNameValue, ParenthesizedGenericArguments, Pat, Path, PathArguments, PathSegment, QSelf,
+    ReturnType, Stmt, Token, TraitItem, TraitItemFn, Type, TypeParamBound, TypePath, WhereClause,
     WherePredicate,
 };
 
@@ -61,7 +63,7 @@ pub fn make_exp_func_trait_bound(
         .collect::<Vec<_>>();
 
     // Filters function arguments, except self arg
-    let args_ty = trait_func
+    let args_ty_iter = trait_func
         .sig
         .inputs
         .iter()
@@ -70,8 +72,7 @@ pub fn make_exp_func_trait_bound(
             FnArg::Typed(pt) => Some(&*pt.ty),
         })
         .cloned()
-        .map(|mut ty| ty.deselfified(cx))
-        .collect::<Result<Vec<_>, _>>()?;
+        .map(|mut ty| ty.deselfified(cx));
 
     let ret_ty = make_action_call_func_ret(cx, trait_func)?.unwrap_or(parse_quote! { () });
     let lts_bounds: Option<BoundLifetimes> = if lts.is_empty() {
@@ -81,9 +82,9 @@ pub fn make_exp_func_trait_bound(
     };
 
     let func_trait: Type = if is_async {
-        parse_quote! { ::moq::AsyncFunc<(#(#args_ty,)*), #ret_ty> }
+        parse_quote! { ::moq::AsyncFunc<(#(#args_ty_iter,)*), #ret_ty> }
     } else {
-        parse_quote! { ::moq::Func<(#(#args_ty,)*), #ret_ty> }
+        parse_quote! { ::moq::Func<(#(#args_ty_iter,)*), #ret_ty> }
     };
 
     let res = parse_quote! {
@@ -163,23 +164,32 @@ pub fn make_action_call_func_ret(
                         }
                     }
                 }
-                ret_ty.deselfify(cx)?;
+                ret_ty.deselfify(cx);
                 Ok(Some(ret_ty))
             }
             other => {
-                let ret_ty = other.clone().deselfified(cx)?;
+                let ret_ty = other.clone().deselfified(cx);
                 Ok(Some(ret_ty))
             }
         },
     }
 }
 
-/// Removes `#[moq(..)]` attributes
-pub fn demoqify_trait(mut trait_def: ItemTrait) -> ItemTrait {
-    trait_def.items = trait_def
-        .items
-        .into_iter()
-        .map(|item| match item {
+// ======================= TRAIT ITEM ======================= //
+
+pub trait TraitItemExt {
+    fn demoqified(self) -> Self;
+    fn demoqify(&mut self);
+}
+
+impl TraitItemExt for TraitItem {
+    fn demoqified(mut self) -> Self {
+        self.demoqify();
+        self
+    }
+
+    fn demoqify(&mut self) {
+        replace_with_or_abort(self, |this| match this {
             TraitItem::Const(mut item) => {
                 item.attrs.demoqify();
                 TraitItem::Const(item)
@@ -197,39 +207,44 @@ pub fn demoqify_trait(mut trait_def: ItemTrait) -> ItemTrait {
                 TraitItem::Macro(item)
             }
             item => item,
-        })
-        .collect();
-
-    trait_def
+        });
+    }
 }
 
-pub fn deselfify_impl_item(cx: &Context, item: ImplItem) -> Result<ImplItem, syn::Error> {
-    match item {
-        ImplItem::Const(cst) => {
-            // TODO
-            Ok(ImplItem::Const(cst))
-        }
-        ImplItem::Fn(mut f) => {
-            for inp in &mut f.sig.inputs {
-                match inp {
-                    FnArg::Receiver(_) => {}
-                    FnArg::Typed(arg) => {
-                        arg.ty.deselfify(cx)?;
-                    }
-                }
-            }
+// ======================= ITEM TRAIT ======================= //
 
-            if let ReturnType::Type(_, ty) = &mut f.sig.output {
-                ty.deselfify(cx)?;
-            }
+pub trait ItemTraitExt {
+    fn demoqified(self) -> Self;
+    fn demoqify(&mut self);
+}
 
-            Ok(ImplItem::Fn(f))
-        }
-        ImplItem::Type(ty) => {
-            // TODO
-            Ok(ImplItem::Type(ty))
-        }
-        other => Ok(other),
+impl ItemTraitExt for ItemTrait {
+    fn demoqified(mut self) -> Self {
+        self.demoqify();
+        self
+    }
+
+    fn demoqify(&mut self) {
+        self.items.iter_mut().for_each(|item| item.demoqify());
+    }
+}
+
+// ======================= IMPL ITEM ======================= //
+
+pub trait ImplItemExt {
+    fn deselfified(self, cx: &Context) -> Self;
+    fn deselfify(&mut self, cx: &Context);
+}
+
+impl ImplItemExt for ImplItem {
+    fn deselfified(mut self, cx: &Context) -> Self {
+        self.deselfify(cx);
+        self
+    }
+
+    fn deselfify(&mut self, cx: &Context) {
+        let mut vis = DeselfifyVisitor { cx };
+        vis.visit_impl_item_mut(self);
     }
 }
 
@@ -238,10 +253,10 @@ pub fn deselfify_impl_item(cx: &Context, item: ImplItem) -> Result<ImplItem, syn
 pub trait AttributesExt {
     fn moqified_iter(&self) -> impl Iterator<Item = &Attribute>;
     fn moqified(self) -> Self;
-    fn moqify(&mut self) -> &mut Self;
+    fn moqify(&mut self);
     fn demoqified_iter(&self) -> impl Iterator<Item = &Attribute>;
     fn demoqified(self) -> Self;
-    fn demoqify(&mut self) -> &mut Self;
+    fn demoqify(&mut self);
 }
 
 impl AttributesExt for Vec<Attribute> {
@@ -254,13 +269,12 @@ impl AttributesExt for Vec<Attribute> {
         self
     }
 
-    fn moqify(&mut self) -> &mut Self {
+    fn moqify(&mut self) {
         replace_with_or_abort(self, |this| {
             this.into_iter()
                 .filter(|attr| attr.path() == symbols::MOQ)
                 .collect()
         });
-        self
     }
 
     fn demoqified_iter(&self) -> impl Iterator<Item = &Attribute> {
@@ -272,13 +286,12 @@ impl AttributesExt for Vec<Attribute> {
         self
     }
 
-    fn demoqify(&mut self) -> &mut Self {
+    fn demoqify(&mut self) {
         replace_with_or_abort(self, |this| {
             this.into_iter()
                 .filter(|attr| attr.path() != symbols::MOQ)
                 .collect()
         });
-        self
     }
 }
 
@@ -288,19 +301,19 @@ pub trait GenericsExt {
     /// Merge two generics into one
     fn merged(self, other: Generics) -> Generics;
     /// Merge two generics into one
-    fn merge(&mut self, other: Generics) -> &mut Self;
+    fn merge(&mut self, other: Generics);
     /// Filters generics for lifetimes and returns new generics with only lifetimes
     fn lifetimified(self) -> Generics;
     /// Filters generics for lifetimes and leaves generics only with lifetimes
-    fn lifetimify(&mut self) -> &mut Self;
+    fn lifetimify(&mut self);
     /// Removes lifetimes from generics
     fn delifetimified(self) -> Generics;
     /// Removes lifetimes from generics
-    fn delifetimify(&mut self) -> &mut Self;
+    fn delifetimify(&mut self);
     /// Applies `T: 'static` bound on every generic parameter
     fn staticized(self) -> Generics;
     /// Applies `T: 'static` bound on every generic parameter
-    fn staticize(&mut self) -> &mut Self;
+    fn staticize(&mut self);
 }
 
 impl GenericsExt for Generics {
@@ -309,9 +322,8 @@ impl GenericsExt for Generics {
         self
     }
 
-    fn merge(&mut self, other: Generics) -> &mut Self {
+    fn merge(&mut self, other: Generics) {
         merge_generics(self, other);
-        self
     }
 
     fn lifetimified(mut self) -> Generics {
@@ -319,9 +331,8 @@ impl GenericsExt for Generics {
         self
     }
 
-    fn lifetimify(&mut self) -> &mut Self {
+    fn lifetimify(&mut self) {
         lifetimify_generics(self);
-        self
     }
 
     fn delifetimified(mut self) -> Generics {
@@ -329,9 +340,8 @@ impl GenericsExt for Generics {
         self
     }
 
-    fn delifetimify(&mut self) -> &mut Self {
+    fn delifetimify(&mut self) {
         delifetimify_generics(self);
-        self
     }
 
     fn staticized(mut self) -> Generics {
@@ -339,9 +349,8 @@ impl GenericsExt for Generics {
         self
     }
 
-    fn staticize(&mut self) -> &mut Self {
+    fn staticize(&mut self) {
         staticize_generics(self);
-        self
     }
 }
 
@@ -426,189 +435,80 @@ fn staticize_generics(gen: &mut Generics) {
     }
 }
 
-// ======================= GENERICS ======================= //
+// ======================= TYPE ======================= //
 
 pub trait TypeExt {
-    fn deselfified(self, cx: &Context) -> Result<Self, syn::Error>
-    where
-        Self: Sized;
-    fn deselfify(&mut self, cx: &Context) -> Result<&mut Self, syn::Error>;
+    fn deselfified(self, cx: &Context) -> Self;
+    fn deselfify(&mut self, cx: &Context);
 }
 
 impl TypeExt for Type {
-    fn deselfified(mut self, cx: &Context) -> Result<Self, syn::Error>
-    where
-        Self: Sized,
-    {
-        self.deselfify(cx)?;
-        Ok(self)
+    fn deselfified(mut self, cx: &Context) -> Self {
+        self.deselfify(cx);
+        self
     }
 
-    fn deselfify(&mut self, cx: &Context) -> Result<&mut Self, syn::Error> {
-        deselfify_type(self, cx)?;
-        Ok(self)
+    fn deselfify(&mut self, cx: &Context) {
+        let mut vis = DeselfifyVisitor { cx };
+        vis.visit_type_mut(self);
     }
 }
 
 /// Turns `Self::AssocItem` -> `<TraitMock as Trait>::AssocItem`
-fn deselfify_type(ty: &mut Type, cx: &Context) -> Result<(), syn::Error> {
-    match ty {
-        Type::Array(ty) => deselfify_type(&mut *ty.elem, cx)?,
-        Type::BareFn(ty) => {
-            if let ReturnType::Type(_, ty) = &mut ty.output {
-                deselfify_type(&mut **ty, cx)?;
-            }
-            for inp_arg in &mut ty.inputs {
-                deselfify_type(&mut inp_arg.ty, cx)?;
-            }
-        }
-        Type::Group(ty) => deselfify_type(&mut *ty.elem, cx)?,
-        Type::Paren(ty) => deselfify_type(&mut *ty.elem, cx)?,
-        Type::Path(ty) => {
-            if let Some(qself) = &mut ty.qself {
-                deselfify_type(&mut *qself.ty, cx)?
-            }
+struct DeselfifyVisitor<'a> {
+    cx: &'a Context,
+}
 
-            for seg in &mut ty.path.segments {
-                // If the segment is `Self` (first segment) then init qself with mock struct
-                // and set the first segment is trait.
-                // The result will be looks like `Self::AssocItem` -> `<TraitMock<T> as Trait<T>>::AssocItem`
-                //
-                // If qself is already exists then nothing will happen because `Self` can't  be in segments
-                if seg.ident == "Self" {
-                    let mock_ident = &cx.mock_ident;
-                    let (_mock_impl_generics, mock_ty_generics, _mock_where_clause) =
-                        cx.mock_generics.split_for_impl();
-                    ty.qself = Some(QSelf {
-                        lt_token: <Token![<]>::default(),
-                        ty: Box::new(parse_quote! { #mock_ident #mock_ty_generics }),
-                        position: 1,
-                        as_token: Some(<Token![as]>::default()),
-                        gt_token: <Token![>]>::default(),
-                    });
-
-                    let trait_segment = if cx.trait_generics.params.is_empty() {
-                        PathSegment {
-                            ident: cx.trait_ident.clone(),
-                            arguments: PathArguments::None,
-                        }
-                    } else {
-                        let (_trait_impl_generics, trait_ty_generics, _trait_where_clause) =
-                            cx.trait_generics.split_for_impl();
-                        PathSegment {
-                            ident: cx.trait_ident.clone(),
-                            arguments: PathArguments::AngleBracketed(
-                                parse_quote! { #trait_ty_generics },
-                            ),
-                        }
-                    };
-
-                    // Replace `Self` segment to the new one
-                    *seg = trait_segment;
-                    continue;
-                }
-
-                match &mut seg.arguments {
-                    PathArguments::None => { /* do nothing */ }
-                    PathArguments::AngleBracketed(arg) => {
-                        for arg in &mut arg.args {
-                            match arg {
-                                GenericArgument::Type(ty) => deselfify_type(ty, cx)?,
-                                GenericArgument::AssocType(b) => deselfify_type(&mut b.ty, cx)?,
-                                _ => { /* do nothing */ }
-                            }
-                        }
-                    }
-                    PathArguments::Parenthesized(arg) => {
-                        for inp in &mut arg.inputs {
-                            deselfify_type(inp, cx)?;
-                        }
-
-                        if let ReturnType::Type(_, ty) = &mut arg.output {
-                            deselfify_type(&mut **ty, cx)?;
-                        }
-                    }
-                }
-            }
-        }
-        Type::Ptr(ty) => deselfify_type(&mut *ty.elem, cx)?,
-        Type::Reference(ty) => deselfify_type(&mut *ty.elem, cx)?,
-        Type::Slice(ty) => deselfify_type(&mut *ty.elem, cx)?,
-        Type::TraitObject(ty) => {
-            for p in &mut ty.bounds {
-                if let TypeParamBound::Trait(tr) = p {
-                    for seg in &mut tr.path.segments {
-                        match &mut seg.arguments {
-                            PathArguments::None => { /* do nothing */ }
-                            PathArguments::AngleBracketed(arg) => {
-                                for arg in &mut arg.args {
-                                    match arg {
-                                        GenericArgument::Type(ty) => deselfify_type(ty, cx)?,
-                                        GenericArgument::AssocType(b) => {
-                                            deselfify_type(&mut b.ty, cx)?
-                                        }
-                                        _ => { /* do nothing */ }
-                                    }
-                                }
-                            }
-                            PathArguments::Parenthesized(arg) => {
-                                for inp in &mut arg.inputs {
-                                    deselfify_type(inp, cx)?;
-                                }
-
-                                if let ReturnType::Type(_, ty) = &mut arg.output {
-                                    deselfify_type(&mut **ty, cx)?;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        Type::Tuple(ty) => {
-            for ty in &mut ty.elems {
-                deselfify_type(ty, cx)?;
-            }
-        }
-        Type::Infer(_) => { /* do nothing */ }
-        Type::Never(_) => { /* do nothing */ }
-        Type::ImplTrait(ty) => {
-            for p in &mut ty.bounds {
-                if let TypeParamBound::Trait(tr) = p {
-                    for seg in &mut tr.path.segments {
-                        match &mut seg.arguments {
-                            PathArguments::None => { /* do nothing */ }
-                            PathArguments::AngleBracketed(arg) => {
-                                for arg in &mut arg.args {
-                                    match arg {
-                                        GenericArgument::Type(ty) => deselfify_type(ty, cx)?,
-                                        GenericArgument::AssocType(b) => {
-                                            deselfify_type(&mut b.ty, cx)?
-                                        }
-                                        _ => { /* do nothing */ }
-                                    }
-                                }
-                            }
-                            PathArguments::Parenthesized(arg) => {
-                                for inp in &mut arg.inputs {
-                                    deselfify_type(inp, cx)?;
-                                }
-
-                                if let ReturnType::Type(_, ty) = &mut arg.output {
-                                    deselfify_type(&mut **ty, cx)?;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        x => {
-            return Err(syn::Error::new(
-                x.span(),
-                "unsupported type for deselfifying",
-            ))
+impl VisitMut for DeselfifyVisitor<'_> {
+    fn visit_fn_arg_mut(&mut self, i: &mut FnArg) {
+        match i {
+            FnArg::Receiver(_) => { /* do nothing */ }
+            FnArg::Typed(pat) => self.visit_pat_type_mut(pat),
         }
     }
-    Ok(())
+
+    fn visit_type_path_mut(&mut self, i: &mut TypePath) {
+        if let Some(qself) = &mut i.qself {
+            self.visit_qself_mut(qself);
+        }
+
+        for seg in &mut i.path.segments {
+            // If the segment is `Self` (first segment) then init qself with mock struct
+            // and set the first segment is trait.
+            // The result will be looks like `Self::AssocItem` -> `<TraitMock<T> as Trait<T>>::AssocItem`
+            //
+            // If qself is already exists then nothing will happen because `Self` can't be in segments
+            if seg.ident == "Self" {
+                let mock_ident = &self.cx.mock_ident;
+                let (_mock_impl_generics, mock_ty_generics, _mock_where_clause) =
+                    self.cx.mock_generics.split_for_impl();
+                i.qself = Some(QSelf {
+                    lt_token: <Token![<]>::default(),
+                    ty: Box::new(parse_quote! { #mock_ident #mock_ty_generics }),
+                    position: 1,
+                    as_token: Some(<Token![as]>::default()),
+                    gt_token: <Token![>]>::default(),
+                });
+
+                let trait_segment = if self.cx.trait_generics.params.is_empty() {
+                    PathSegment {
+                        ident: self.cx.trait_ident.clone(),
+                        arguments: PathArguments::None,
+                    }
+                } else {
+                    let (_trait_impl_generics, trait_ty_generics, _trait_where_clause) =
+                        self.cx.trait_generics.split_for_impl();
+                    PathSegment {
+                        ident: self.cx.trait_ident.clone(),
+                        arguments: PathArguments::AngleBracketed(
+                            parse_quote! { #trait_ty_generics },
+                        ),
+                    }
+                };
+
+                // Replace `Self` segment to the new one
+                *seg = trait_segment;
+            }
+        }
+    }
 }

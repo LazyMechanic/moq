@@ -1,7 +1,8 @@
 use crate::context::Context;
 use crate::{symbols, utils};
+use itertools::Itertools;
 
-use crate::utils::{deselfify_impl_item, AttributesExt, GenericsExt};
+use crate::utils::{AttributesExt, GenericsExt, ImplItemExt};
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote, ToTokens};
 use syn::punctuated::Punctuated;
@@ -50,7 +51,7 @@ impl Mock {
             .trait_items
             .iter()
             .filter_map(|item| filter_map_trait_item(cx, item).transpose())
-            .map(|item| deselfify_impl_item(cx, item?))
+            .map_ok(|item| item.deselfified(cx))
             .collect::<Result<Vec<_>, _>>()?;
 
         let phantom = {

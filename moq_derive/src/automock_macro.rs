@@ -3,7 +3,7 @@ use crate::context::Context;
 use crate::mock::Mock;
 use proc_macro2_diagnostics::Diagnostic;
 
-use crate::utils;
+use crate::utils::ItemTraitExt;
 use quote::{quote, ToTokens};
 use syn::parse::{Parse, ParseStream};
 use syn::{ItemTrait, TraitItem};
@@ -29,7 +29,7 @@ pub struct AutomockMacro {
 impl Parse for AutomockMacro {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let trait_def = input.parse::<ItemTrait>()?;
-        let demoquified_trait_def = utils::demoqify_trait(trait_def.clone());
+        let demoquified_trait_def = trait_def.clone().demoqified();
         let cx = Context::from_ast(trait_def);
         let actions_def = ActionCollection::from_ast(&cx)?;
         let actions = cx
