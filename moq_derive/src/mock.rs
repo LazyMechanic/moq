@@ -1,7 +1,7 @@
 use crate::context::Context;
 use crate::{symbols, utils};
 
-use crate::utils::{deselfify_impl_item, GenericsExt};
+use crate::utils::{deselfify_impl_item, AttributesExt, GenericsExt};
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote, ToTokens};
 use syn::punctuated::Punctuated;
@@ -222,8 +222,8 @@ fn filter_map_trait_item(cx: &Context, item: &TraitItem) -> Result<Option<ImplIt
 }
 
 fn trait_const(trait_cst: &TraitItemConst) -> Result<ImplItemConst, syn::Error> {
-    let moq_attrs_iter = utils::moqify_attrs(trait_cst.attrs.iter());
-    let other_attrs_iter = utils::demoqify_attrs(trait_cst.attrs.iter());
+    let moq_attrs_iter = trait_cst.attrs.moqified_iter();
+    let other_attrs = trait_cst.attrs.demoqified_iter().cloned().collect();
 
     let mut expr = None;
     for attr in moq_attrs_iter {
@@ -256,7 +256,7 @@ fn trait_const(trait_cst: &TraitItemConst) -> Result<ImplItemConst, syn::Error> 
     }
 
     let cst = ImplItemConst {
-        attrs: other_attrs_iter.cloned().collect(),
+        attrs: other_attrs,
         vis: Visibility::Inherited,
         defaultness: None,
         const_token: Default::default(),
@@ -280,8 +280,8 @@ fn trait_const(trait_cst: &TraitItemConst) -> Result<ImplItemConst, syn::Error> 
 }
 
 fn trait_type(trait_ty: &TraitItemType) -> Result<ImplItemType, syn::Error> {
-    let moq_attrs_iter = utils::moqify_attrs(trait_ty.attrs.iter());
-    let other_attrs_iter = utils::demoqify_attrs(trait_ty.attrs.iter());
+    let moq_attrs_iter = trait_ty.attrs.moqified_iter();
+    let other_attrs = trait_ty.attrs.demoqified_iter().cloned().collect();
 
     let mut ty = None;
     for attr in moq_attrs_iter {
@@ -310,7 +310,7 @@ fn trait_type(trait_ty: &TraitItemType) -> Result<ImplItemType, syn::Error> {
     }
 
     let ty = ImplItemType {
-        attrs: other_attrs_iter.cloned().collect(),
+        attrs: other_attrs,
         vis: Visibility::Inherited,
         defaultness: None,
         type_token: Default::default(),
@@ -349,8 +349,8 @@ fn trait_func(cx: &Context, func: &TraitItemFn) -> Result<ImplItemFn, syn::Error
         ));
     }
 
-    let func_moq_attrs_iter = utils::moqify_attrs(func.attrs.iter());
-    let func_other_attrs = utils::demoqify_attrs(func.attrs.iter()).collect::<Vec<_>>();
+    let func_moq_attrs_iter = func.attrs.moqified_iter();
+    let func_other_attrs_iter = func.attrs.demoqified_iter();
     let func_ident = &func.sig.ident;
     let func_constness = func.sig.constness;
     let func_asyncness = func.sig.asyncness;
@@ -386,7 +386,7 @@ fn trait_func(cx: &Context, func: &TraitItemFn) -> Result<ImplItemFn, syn::Error
     };
 
     let method = parse_quote! {
-        #(#func_other_attrs)*
+        #(#func_other_attrs_iter)*
         #func_constness #func_asyncness #func_unsafety fn #func_ident #func_ty_generics (#func_args) #func_ret
         #func_where_clause
         {

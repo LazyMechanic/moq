@@ -2,7 +2,7 @@ use crate::utils;
 use std::collections::HashMap;
 
 use crate::action::Action;
-use crate::utils::GenericsExt;
+use crate::utils::{AttributesExt, GenericsExt};
 use syn::parse::Parse;
 use syn::{Attribute, Generics, Ident, ItemTrait, Token, TraitItem, Visibility};
 
@@ -24,10 +24,8 @@ impl Context {
     pub fn from_ast(trait_def: ItemTrait) -> Self {
         let trait_ident = trait_def.ident;
         let trait_generics = trait_def.generics;
-        let trait_moq_attrs = utils::moqify_attrs(trait_def.attrs.iter())
-            .cloned()
-            .collect();
-        let trait_demoqified_attrs = utils::demoqify_attrs(trait_def.attrs.into_iter()).collect();
+        let trait_moq_attrs = trait_def.attrs.moqified_iter().cloned().collect();
+        let trait_demoqified_attrs = trait_def.attrs.demoqified_iter().cloned().collect();
         let trait_vis = trait_def.vis;
         let trait_unsafety = trait_def.unsafety;
         let trait_items = trait_def.items;

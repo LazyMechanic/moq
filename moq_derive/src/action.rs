@@ -1,7 +1,7 @@
 use crate::context::Context;
 use crate::utils;
 
-use crate::utils::{make_action_call_func_ret, GenericsExt};
+use crate::utils::{make_action_call_func_ret, GenericsExt, TypeExt};
 use proc_macro2::TokenStream;
 use quote::{quote, ToTokens};
 use syn::punctuated::Punctuated;
@@ -55,7 +55,7 @@ impl Action {
                 FnArg::Typed(pat) => Some(pat),
             })
             .map(|mut pat| {
-                utils::deselfify_type(cx, &mut *pat.ty)?;
+                pat.ty.deselfify(cx)?;
                 Ok::<_, syn::Error>(FnArg::Typed(pat))
             })
             .collect::<Result<_, _>>()?;
