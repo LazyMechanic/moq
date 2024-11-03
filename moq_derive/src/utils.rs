@@ -1,4 +1,4 @@
-use crate::attribute::MoqAttribute;
+use crate::attribute::{MoqAttribute, OutputAttribute};
 use crate::context::Context;
 use crate::symbols;
 use if_chain::if_chain;
@@ -124,64 +124,39 @@ pub fn make_action_call_func_ret(
             Type::ImplTrait(ty) => {
                 let moq_attrs_iter = trait_func.attrs.moqified_iter();
                 let bounds = &ty.bounds;
-                // TODO: check count of identical attributes
-                let mut ret_ty: Type = parse_quote!( ::std::boxed::Box<dyn #bounds> );
-                for attr in moq_attrs_iter {
-                    let nested_list = attr.parse_args_with(
-                        Punctuated::<MetaNameValue, Token![,]>::parse_terminated,
-                    )?;
-                    for nested in nested_list {
-                        if nested.path == symbols::OUTPUT {
-                            // #[moq(return = "::path::to::Type")]
-                            // #[moq(return = "::path::to::Type<_>")]
-                            match nested.value {
-                                Expr::Lit(ExprLit {
-                                    lit: Lit::Str(lit), ..
-                                }) => {
-                                    let path: Path = lit.parse()?;
-                                    let last_segment = path.segments.last().ok_or_else(|| {
-                                        syn::Error::new_spanned(
-                                            &path.segments,
-                                            "last segment not found",
-                                        )
-                                    })?;
 
-                                    // #[moq(return = "::path::to::Type<_>")]
-                                    if_chain! {
-                                        if let PathArguments::AngleBracketed(args) = &last_segment.arguments;
-                                        if args.args.len() == 1;
-                                        if matches!(
-                                            args.args.first(),
-                                            Some(GenericArgument::Type(Type::Infer(_)))
-                                        );
-                                        then {
-                                            // ::path::to::Type<Box<dyn ...>>
-                                            let wrapper = {
-                                                let mut p = path.clone();
-                                                let last_segment =
-                                                    p.segments.last_mut().expect("already checked");
-                                                last_segment.arguments = PathArguments::None;
-                                                quote!{ #p }
-                                            };
-                                            ret_ty = parse_quote! { #wrapper<#ret_ty> };
-                                        } else {
-                                            ret_ty = parse_quote! { #path };
-                                        }
+                let default_ty: Type = parse_quote!( ::std::boxed::Box<dyn #bounds> );
+                let mut has_output = false;
+                let mut ret_ty = None;
+                for attr in moq_attrs_iter {
+                    let nested_list = attr
+                        .parse_args_with(Punctuated::<MoqAttribute, Token![,]>::parse_terminated)?;
+                    for nested in nested_list {
+                        match nested {
+                            MoqAttribute::Output(attr) => {
+                                if has_output {
+                                    return Err(syn::Error::new_spanned(
+                                        attr,
+                                        "multiple attributes is not allowed",
+                                    ));
+                                }
+
+                                match attr {
+                                    OutputAttribute::FullPath(path) => {
+                                        ret_ty = Some(parse_quote! { #path });
+                                    }
+                                    OutputAttribute::InferPath(path) => {
+                                        ret_ty = Some(parse_quote! { #path<#default_ty> });
                                     }
                                 }
-                                other => {
-                                    return Err(syn::Error::new_spanned(
-                                        other,
-                                        "unsupported attribute value format",
-                                    ))
-                                }
                             }
-                        } else {
-                            return Err(syn::Error::new_spanned(attr, "unsupported attribute"));
+                            other => {
+                                return Err(syn::Error::new_spanned(other, "unsupported attribute"))
+                            }
                         }
                     }
                 }
-                ret_ty.deselfify(cx);
+                let ret_ty = ret_ty.unwrap_or(default_ty).deselfified(cx);
                 Ok(Some(ret_ty))
             }
             other => {
