@@ -202,6 +202,7 @@ impl ItemTraitExt for ItemTrait {
     }
 
     fn demoqify(&mut self) {
+        self.attrs.demoqify();
         self.items.iter_mut().for_each(|item| item.demoqify());
     }
 }

@@ -62,3 +62,19 @@ fn test4() {
     let m = MockTrait::<()>::new().expect_f(|| 1);
     assert_eq!(m.f(), 1);
 }
+
+#[test]
+fn test5() {
+    trait DummyTrait {}
+    impl DummyTrait for i32 {}
+
+    #[moq::automock]
+    trait Trait {
+        #[moq(default = "i32")]
+        type AssocType1: DummyTrait;
+        #[moq(default = "Self::AssocType1")]
+        type AssocType2: DummyTrait;
+    }
+
+    let _: <MockTrait as Trait>::AssocType2 = 1i32;
+}

@@ -59,3 +59,26 @@ fn test5() {
 
     assert_eq!(MockTrait::CONST, 1);
 }
+
+#[test]
+fn test6() {
+    #[moq::automock]
+    trait Trait {
+        const CONST1: i32 = 1;
+        const CONST2: i32 = Self::CONST1;
+    }
+
+    assert_eq!(MockTrait::CONST2, MockTrait::CONST1);
+}
+
+#[test]
+fn test7() {
+    #[moq::automock]
+    trait Trait {
+        const CONST1: i32 = 1i32;
+        #[moq(default = Self::CONST1)]
+        const CONST2: i32;
+    }
+
+    assert_eq!(MockTrait::CONST2, MockTrait::CONST1);
+}
