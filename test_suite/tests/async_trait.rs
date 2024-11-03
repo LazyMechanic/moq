@@ -6,7 +6,7 @@ async fn test1() {
         async fn f(&self);
     }
 
-    let m = TraitMock::new().expect_f(|| async {});
+    let m = MockTrait::new().expect_f(|| async {});
     m.f().await;
 }
 
@@ -18,7 +18,7 @@ async fn test2() {
         async fn f(&self);
     }
 
-    let m = TraitMock::new().expect_f(|| async {});
+    let m = MockTrait::new().expect_f(|| async {});
 
     tokio::spawn(async move {
         m.f().await;
@@ -35,7 +35,7 @@ async fn test3() {
         async fn f(&self, arg: i32);
     }
 
-    let m = TraitMock::new().expect_f(|arg| async move {
+    let m = MockTrait::new().expect_f(|arg| async move {
         assert_eq!(arg, 1);
     });
     m.f(1).await;
@@ -49,7 +49,7 @@ async fn test4() {
         async fn f(&self) -> i32;
     }
 
-    let m = TraitMock::new().expect_f(|| async move { 1 });
+    let m = MockTrait::new().expect_f(|| async move { 1 });
     assert_eq!(m.f().await, 1);
 }
 
@@ -61,7 +61,7 @@ async fn test5() {
         async fn f(&self, arg: i32) -> i32;
     }
 
-    let m = TraitMock::new().expect_f(|arg| async move {
+    let m = MockTrait::new().expect_f(|arg| async move {
         assert_eq!(arg, 1);
         arg
     });
@@ -76,7 +76,7 @@ async fn test6() {
         async fn f(&self, arg1: i32, arg2: String) -> i32;
     }
 
-    let m = TraitMock::new().expect_f(|arg1, arg2| async move {
+    let m = MockTrait::new().expect_f(|arg1, arg2| async move {
         assert_eq!(arg1, 1);
         assert_eq!(arg2, "2");
         arg1
@@ -95,7 +95,7 @@ async fn test7() {
         async fn f<'a>(&self, arg: Struct<'a>);
     }
 
-    let m = TraitMock::new().expect_f(moq::lambda!(
+    let m = MockTrait::new().expect_f(moq::lambda!(
         async fn <'a>(arg: Struct<'a>) {
             assert_eq!(arg, Struct("1"));
         }
@@ -115,7 +115,7 @@ async fn test8() {
         async fn f(&self) -> Struct<'static>;
     }
 
-    let m = TraitMock::new().expect_f(|| async move { Struct("1") });
+    let m = MockTrait::new().expect_f(|| async move { Struct("1") });
     assert_eq!(m.f().await, Struct("1"));
 }
 
@@ -130,7 +130,7 @@ async fn test9() {
         async fn f<'a>(&self, arg: Struct<'a>) -> Struct<'a>;
     }
 
-    let m = TraitMock::new().expect_f(moq::lambda!(
+    let m = MockTrait::new().expect_f(moq::lambda!(
         async fn <'a>(arg: Struct<'a>) -> Struct<'a> {
             assert_eq!(arg, Struct("1"));
             arg
@@ -150,7 +150,7 @@ async fn test10() {
         async fn f<'a, 'b>(&self, arg1: Struct<'a>, arg2: Struct<'b>) -> Struct<'b>;
     }
 
-    let m = TraitMock::new().expect_f(moq::lambda!(
+    let m = MockTrait::new().expect_f(moq::lambda!(
         async fn <'a, 'b>(arg1: Struct<'a>, arg2: Struct<'b>) -> Struct<'b> {
             assert_eq!(arg1, Struct("1"));
             assert_eq!(arg2, Struct("2"));

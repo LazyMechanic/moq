@@ -20,7 +20,7 @@ trait Trait {
 
 #[test]
 fn test_ok() {
-    let mock = TraitMock::new()
+    let mock = MockTrait::new()
         .expect_func(|arg: i64| {
             assert_eq!(arg, 42);
             format!("Hello, {}", arg)
@@ -36,7 +36,7 @@ fn test_ok() {
 
 #[test]
 fn test_failed_extra_call() {
-    let mock = TraitMock::new()
+    let mock = MockTrait::new()
         .expect_func(|arg: i64| {
             assert_eq!(arg, 42);
             format!("Hello, {}", arg)
@@ -48,7 +48,7 @@ fn test_failed_extra_call() {
 
 #[test]
 fn test_failed_missing_call() {
-    let mock = TraitMock::new()
+    let mock = MockTrait::new()
         .expect_func(|arg: i64| {
             assert_eq!(arg, 42);
             format!("Hello, {}", arg)
@@ -73,7 +73,7 @@ trait Trait {
 
 #[tokio::test]
 async fn test_ok() {
-    let mock = TraitMock::new()
+    let mock = MockTrait::new()
         .expect_func(|arg: i64| async {
             assert_eq!(arg, 42);
             format!("Hello, {}", arg)

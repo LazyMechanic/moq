@@ -95,7 +95,7 @@
 //!     fn f1(&self);
 //!     fn f2(&self);
 //! }
-//! let mock = TraitMock::new().expect_f2(||{});
+//! let mock = MockTrait::new().expect_f2(||{});
 //! mock.f1() // Panic
 //! ```
 //!
@@ -106,7 +106,7 @@
 //!     fn f1(&self);
 //!     fn f2(&self);
 //! }
-//! let mock = TraitMock::new()
+//! let mock = MockTrait::new()
 //!     .expect_f1(||{})
 //!     .expect_f2(||{});
 //! mock.f1()
@@ -125,7 +125,7 @@
 //!         self.f1();
 //!     }
 //! }
-//! let mock = TraitMock::new().expect_f1(|| {});
+//! let mock = MockTrait::new().expect_f1(|| {});
 //! mock.def(); // Success
 //! ```
 //!
@@ -137,7 +137,7 @@
 //!     #[moq(default = "i32")]
 //!     type T;
 //! }
-//! let _: <TraitMock as Trait>::T = 42i32;
+//! let _: <MockTrait as Trait>::T = 42i32;
 //! ```
 //!
 //! ## Attribute `#[moq(default = ...)]` const
@@ -148,7 +148,7 @@
 //!     #[moq(default = 42)]
 //!     const CONST: i32;
 //! }
-//! assert_eq!(<TraitMock as Trait>::CONST, 42);
+//! assert_eq!(<MockTrait as Trait>::CONST, 42);
 //! ```
 //!
 //! ## Attribute `#[moq(default_with = "...")]` const
@@ -160,7 +160,7 @@
 //!     const CONST: i32;
 //! }
 //! const fn some_func() -> i32 { 42 }
-//! assert_eq!(TraitMock::CONST, 42);
+//! assert_eq!(MockTrait::CONST, 42);
 //! ```
 //!
 //! ## Macro `moq::lambda!(...)`

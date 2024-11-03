@@ -7,7 +7,7 @@ fn test1() {
             A: 'static;
     }
 
-    let m = TraitMock::new().expect_f::<i32, _>(|| {});
+    let m = MockTrait::new().expect_f::<i32, _>(|| {});
     m.f::<i32>();
 }
 
@@ -20,7 +20,7 @@ fn test2() {
             A: 'static;
     }
 
-    let m = TraitMock::new().expect_f(|arg: i32| assert_eq!(arg, 1));
+    let m = MockTrait::new().expect_f(|arg: i32| assert_eq!(arg, 1));
     m.f(1i32);
 }
 
@@ -33,7 +33,7 @@ fn test3() {
             A: 'static;
     }
 
-    let m = TraitMock::new().expect_f(|| 1i32);
+    let m = MockTrait::new().expect_f(|| 1i32);
     assert_eq!(m.f::<i32>(), 1i32);
 }
 
@@ -47,7 +47,7 @@ fn test4() {
             B: 'static;
     }
 
-    let m = TraitMock::new().expect_f(|arg: i32| {
+    let m = MockTrait::new().expect_f(|arg: i32| {
         assert_eq!(arg, 1);
         "2"
     });
@@ -68,7 +68,7 @@ fn test5() {
             A: 'static;
     }
 
-    let m = TraitMock::new().expect_f(|arg: Dummy<i32>| {
+    let m = MockTrait::new().expect_f(|arg: Dummy<i32>| {
         assert_eq!(arg.a, "1");
         assert_eq!(arg.b, 2);
     });
@@ -91,7 +91,7 @@ fn test6() {
             A: 'static;
     }
 
-    let m = TraitMock::new().expect_f(moq::lambda!(
+    let m = MockTrait::new().expect_f(moq::lambda!(
         fn <'a>(arg: Dummy<'a, i32>) -> Dummy<'a, i32> {
             assert_eq!(arg.a, "1");
             assert_eq!(arg.b, 2);

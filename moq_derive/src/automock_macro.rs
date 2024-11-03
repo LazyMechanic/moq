@@ -30,10 +30,11 @@ impl Parse for AutomockMacro {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let trait_def = input.parse::<ItemTrait>()?;
         let demoquified_trait_def = trait_def.clone().demoqified();
-        let cx = Context::from_ast(trait_def);
+        let cx = Context::from_ast(trait_def)?;
         let actions_def = ActionCollection::from_ast(&cx)?;
         let actions = cx
-            .trait_items
+            .trait_def
+            .items
             .iter()
             .filter_map(|item| match item {
                 TraitItem::Fn(item) => Some(item),

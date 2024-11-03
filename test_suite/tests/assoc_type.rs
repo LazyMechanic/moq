@@ -9,7 +9,7 @@ fn test1() {
         type AssocType: DummyTrait;
     }
 
-    let _: <TraitMock as Trait>::AssocType = 1i32;
+    let _: <MockTrait as Trait>::AssocType = 1i32;
 }
 
 #[test]
@@ -25,7 +25,7 @@ fn test2() {
         fn f(&self, arg: Self::AssocType);
     }
 
-    let m = TraitMock::new().expect_f(|arg: i32| assert_eq!(arg, 1));
+    let m = MockTrait::new().expect_f(|arg: i32| assert_eq!(arg, 1));
     m.f(1);
 }
 
@@ -42,7 +42,7 @@ fn test3() {
         fn f(&self, arg: Self::AssocType);
     }
 
-    let m = TraitMock::<()>::new().expect_f(|arg: i32| assert_eq!(arg, 1));
+    let m = MockTrait::<()>::new().expect_f(|arg: i32| assert_eq!(arg, 1));
     m.f(1);
 }
 
@@ -59,6 +59,6 @@ fn test4() {
         fn f(&self) -> Self::AssocType;
     }
 
-    let m = TraitMock::<()>::new().expect_f(|| 1);
+    let m = MockTrait::<()>::new().expect_f(|| 1);
     assert_eq!(m.f(), 1);
 }

@@ -6,7 +6,7 @@ fn test1() {
         fn f(&self);
     }
 
-    let _m = TraitMock::new().expect_f(|| {});
+    let _m = MockTrait::new().expect_f(|| {});
 }
 
 #[test]
@@ -17,7 +17,7 @@ fn test2() {
         fn f(&self);
     }
 
-    let m = TraitMock::new();
+    let m = MockTrait::new();
     m.f();
 }
 
@@ -29,7 +29,7 @@ fn test3() {
         fn f(&self);
     }
 
-    let m = TraitMock::new().expect_f(|| {});
+    let m = MockTrait::new().expect_f(|| {});
     m.f();
     m.f();
 }
@@ -43,7 +43,7 @@ async fn test4() {
         async fn f(&self);
     }
 
-    let _m = TraitMock::new().expect_f(|| async {});
+    let _m = MockTrait::new().expect_f(|| async {});
 }
 
 #[allow(unused_must_use)]
@@ -56,7 +56,7 @@ async fn test5() {
         async fn f(&self);
     }
 
-    let m = TraitMock::new().expect_f(|| async {});
+    let m = MockTrait::new().expect_f(|| async {});
     m.f();
 }
 
@@ -69,6 +69,6 @@ async fn test6() {
         async fn f(&self);
     }
 
-    let m = TraitMock::new().expect_f(|| async {}).expect_f(|| async {});
+    let m = MockTrait::new().expect_f(|| async {}).expect_f(|| async {});
     m.f().await;
 }

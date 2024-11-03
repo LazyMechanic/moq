@@ -28,9 +28,9 @@ pub struct Action {
 
 impl Action {
     pub fn from_ast(cx: &Context, trait_func: &TraitItemFn) -> Result<Self, syn::Error> {
-        let self_ident = utils::format_action_ident(&cx.trait_ident, &trait_func.sig.ident);
+        let self_ident = utils::format_action_ident(&cx.mock_ident, &trait_func.sig.ident);
         let self_generics = {
-            let trait_gen = cx.trait_generics.clone().delifetimified();
+            let trait_gen = cx.trait_def.generics.clone().delifetimified();
             let func_gen = trait_func.sig.generics.clone().delifetimified();
 
             trait_gen.merged(func_gen).staticized()
@@ -175,8 +175,9 @@ pub struct ActionCollection {
 
 impl ActionCollection {
     pub fn from_ast(cx: &Context) -> Result<Self, syn::Error> {
-        let ident = utils::format_action_collection_ident(&cx.trait_ident);
-        Ok(Self { ident })
+        Ok(Self {
+            ident: cx.action_collection_ident.clone(),
+        })
     }
 }
 

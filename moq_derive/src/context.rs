@@ -1,47 +1,29 @@
 use crate::utils;
-use std::collections::HashMap;
 
-use crate::action::Action;
-use crate::utils::{AttributesExt, GenericsExt};
-use syn::parse::Parse;
-use syn::{Attribute, Generics, Ident, ItemTrait, Token, TraitItem, Visibility};
+use crate::utils::GenericsExt;
+use syn::{Generics, Ident, ItemTrait};
 
 #[derive(Debug)]
 pub struct Context {
-    pub trait_ident: Ident,
-    pub trait_generics: Generics,
-    pub trait_moq_attrs: Vec<Attribute>,
-    pub trait_demoqified_attrs: Vec<Attribute>,
-    pub trait_vis: Visibility,
-    pub trait_unsafety: Option<Token![unsafe]>,
-    pub trait_items: Vec<TraitItem>,
+    pub trait_def: ItemTrait,
 
     pub mock_ident: Ident,
     pub mock_generics: Generics,
+
+    pub action_collection_ident: Ident,
 }
 
 impl Context {
-    pub fn from_ast(trait_def: ItemTrait) -> Self {
-        let trait_ident = trait_def.ident;
-        let trait_generics = trait_def.generics;
-        let trait_moq_attrs = trait_def.attrs.moqified_iter().cloned().collect();
-        let trait_demoqified_attrs = trait_def.attrs.demoqified_iter().cloned().collect();
-        let trait_vis = trait_def.vis;
-        let trait_unsafety = trait_def.unsafety;
-        let trait_items = trait_def.items;
-        let mock_ident = utils::format_mock_ident(&trait_ident);
-        let mock_generics = trait_generics.clone().delifetimified().staticized();
+    pub fn from_ast(trait_def: ItemTrait) -> Result<Self, syn::Error> {
+        let mock_ident = utils::format_mock_ident(&trait_def)?;
+        let mock_generics = trait_def.generics.clone().delifetimified().staticized();
+        let action_collection_ident = utils::format_action_collection_ident(&mock_ident);
 
-        Self {
-            trait_ident,
-            trait_generics,
-            trait_moq_attrs,
-            trait_demoqified_attrs,
-            trait_vis,
-            trait_unsafety,
-            trait_items,
+        Ok(Self {
+            trait_def,
             mock_ident,
             mock_generics,
-        }
+            action_collection_ident,
+        })
     }
 }

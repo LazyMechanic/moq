@@ -19,7 +19,7 @@ pub struct Mock {
     self_ident: Ident,
     self_impl_items: Vec<ImplItem>,
     self_generics: Generics,
-    actions_ident: Ident,
+    action_collection_ident: Ident,
     trait_vis: Visibility,
     trait_attrs: Vec<Attribute>,
     trait_unsafety: Option<Token![unsafe]>,
@@ -33,22 +33,24 @@ impl Mock {
     pub fn from_ast(cx: &Context) -> Result<Self, syn::Error> {
         let self_ident = cx.mock_ident.clone();
         let self_impl_items = cx
-            .trait_items
+            .trait_def
+            .items
             .iter()
             .filter_map(|item| filter_map_exp_func(cx, item))
             .collect::<Result<Vec<_>, _>>()?;
         let self_generics = cx.mock_generics.clone();
 
-        let actions_ident = utils::format_action_collection_ident(&cx.trait_ident);
+        let action_collection_ident = cx.action_collection_ident.clone();
 
-        let trait_vis = cx.trait_vis.clone();
-        let trait_attrs = cx.trait_demoqified_attrs.clone();
-        let trait_unsafety = cx.trait_unsafety;
-        let trait_ident = cx.trait_ident.clone();
-        let trait_generics = cx.trait_generics.clone();
+        let trait_vis = cx.trait_def.vis.clone();
+        let trait_attrs = cx.trait_def.attrs.demoqified_iter().cloned().collect();
+        let trait_unsafety = cx.trait_def.unsafety;
+        let trait_ident = cx.trait_def.ident.clone();
+        let trait_generics = cx.trait_def.generics.clone();
 
         let trait_impl_items = cx
-            .trait_items
+            .trait_def
+            .items
             .iter()
             .filter_map(|item| filter_map_trait_item(cx, item).transpose())
             .map_ok(|item| item.deselfified(cx))
@@ -73,7 +75,7 @@ impl Mock {
             self_ident,
             self_impl_items,
             self_generics,
-            actions_ident,
+            action_collection_ident,
             trait_vis,
             trait_attrs,
             trait_unsafety,
@@ -92,7 +94,7 @@ impl ToTokens for Mock {
         let (_self_impl_generics, self_ty_generics, self_where_clause) =
             self.self_generics.split_for_impl();
 
-        let actions_ident = &self.actions_ident;
+        let action_collection_ident = &self.action_collection_ident;
 
         let trait_vis = &self.trait_vis;
         let trait_attrs = &self.trait_attrs;
@@ -112,7 +114,7 @@ impl ToTokens for Mock {
 
         let def: ItemStruct = parse_quote! {
             #trait_vis struct #self_ident #self_ty_generics #self_where_clause {
-                actions: #actions_ident,
+                actions: #action_collection_ident,
                 #phantom_def
             }
         };
@@ -159,13 +161,13 @@ fn filter_map_exp_func(
 fn exp_func(cx: &Context, trait_func: &TraitItemFn) -> Result<ImplItemFn, syn::Error> {
     let action_path: Path = {
         let action_generics = {
-            let trait_gen = cx.trait_generics.clone().delifetimified();
+            let trait_gen = cx.trait_def.generics.clone().delifetimified();
             let func_gen = trait_func.sig.generics.clone().delifetimified();
 
             trait_gen.merged(func_gen).staticized()
         };
 
-        let action_ident = utils::format_action_ident(&cx.trait_ident, &trait_func.sig.ident);
+        let action_ident = utils::format_action_ident(&cx.mock_ident, &trait_func.sig.ident);
 
         if action_generics.params.is_empty() {
             parse_quote! { #action_ident }
@@ -271,7 +273,7 @@ fn trait_const(trait_cst: &TraitItemConst) -> Result<ImplItemConst, syn::Error> 
             .map(|(_, expr)| expr.clone()))
             .ok_or_else(||
                 syn::Error::new_spanned(
-                    &trait_cst,
+                    trait_cst,
                     "missing value, use `#[moq(default = ...)]`, `#[moq(default_with = ...)]` or default"
                 )
             )?,
@@ -327,7 +329,7 @@ fn trait_type(trait_ty: &TraitItemType) -> Result<ImplItemType, syn::Error> {
             )
             .ok_or_else(||
                 syn::Error::new_spanned(
-                    &trait_ty,
+                    trait_ty,
                     "missing type, use `#[moq(default = ...)]`, `#[moq(default_with = ...)]` or default"
                 )
             )?,
@@ -345,7 +347,7 @@ fn trait_func(cx: &Context, func: &TraitItemFn) -> Result<ImplItemFn, syn::Error
         .any(|item| matches!(item, &FnArg::Receiver(_)));
     if is_static_func {
         return Err(syn::Error::new_spanned(
-            &func,
+            func,
             "static functions are not supported yet",
         ));
     }
@@ -399,9 +401,9 @@ fn trait_func(cx: &Context, func: &TraitItemFn) -> Result<ImplItemFn, syn::Error
 }
 
 fn trait_func_block(cx: &Context, func: &TraitItemFn) -> Result<Block, syn::Error> {
-    let action_ident = utils::format_action_ident(&cx.trait_ident, &func.sig.ident);
+    let action_ident = utils::format_action_ident(&cx.mock_ident, &func.sig.ident);
     let call_generics = {
-        let trait_gen = cx.trait_generics.clone().delifetimified();
+        let trait_gen = cx.trait_def.generics.clone().delifetimified();
         let func_gen = func.sig.generics.clone().delifetimified();
         trait_gen.merged(func_gen)
     };

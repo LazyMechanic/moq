@@ -5,7 +5,7 @@ fn test1() {
         const CONST: i32 = 1;
     }
 
-    assert_eq!(TraitMock::CONST, 1);
+    assert_eq!(MockTrait::CONST, 1);
 }
 
 #[test]
@@ -16,7 +16,7 @@ fn test2() {
         const CONST: i32;
     }
 
-    assert_eq!(TraitMock::CONST, 1);
+    assert_eq!(MockTrait::CONST, 1);
 }
 
 #[test]
@@ -27,7 +27,7 @@ fn test3() {
         const CONST: i32 = 2;
     }
 
-    assert_eq!(TraitMock::CONST, 1);
+    assert_eq!(MockTrait::CONST, 1);
 }
 
 #[test]
@@ -42,7 +42,7 @@ fn test4() {
         1
     }
 
-    assert_eq!(TraitMock::CONST, 1);
+    assert_eq!(MockTrait::CONST, 1);
 }
 
 #[test]
@@ -57,5 +57,5 @@ fn test5() {
         1
     }
 
-    assert_eq!(TraitMock::CONST, 1);
+    assert_eq!(MockTrait::CONST, 1);
 }

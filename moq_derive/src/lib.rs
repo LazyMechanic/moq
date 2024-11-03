@@ -1,4 +1,5 @@
 mod action;
+mod attribute;
 mod automock_macro;
 mod context;
 mod mock;
@@ -19,7 +20,7 @@ use proc_macro::TokenStream;
 ///
 /// #[test]
 /// fn test_ok() {
-///     let mock = TraitMock::new()
+///     let mock = MockTrait::new()
 ///         .expect_func(|arg: i64| {
 ///             assert_eq!(arg, 42);
 ///             format!("Hello, {}", arg)

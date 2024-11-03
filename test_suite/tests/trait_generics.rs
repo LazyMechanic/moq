@@ -5,7 +5,7 @@ fn test1() {
         fn f(&self);
     }
 
-    let m = TraitMock::<i32>::new().expect_f(|| {});
+    let m = MockTrait::<i32>::new().expect_f(|| {});
     m.f();
 }
 
@@ -16,7 +16,7 @@ fn test2() {
         fn f(&self, arg: A);
     }
 
-    let m = TraitMock::new().expect_f(|arg: i32| assert_eq!(arg, 1));
+    let m = MockTrait::new().expect_f(|arg: i32| assert_eq!(arg, 1));
     m.f(1i32);
 }
 
@@ -27,7 +27,7 @@ fn test3() {
         fn f(&self) -> A;
     }
 
-    let m = TraitMock::new().expect_f(|| 1i32);
+    let m = MockTrait::new().expect_f(|| 1i32);
     assert_eq!(m.f(), 1i32);
 }
 
@@ -38,7 +38,7 @@ fn test4() {
         fn f(&self, arg: A) -> A;
     }
 
-    let m = TraitMock::new().expect_f(|arg: i32| {
+    let m = MockTrait::new().expect_f(|arg: i32| {
         assert_eq!(arg, 1);
         arg
     });
@@ -52,7 +52,7 @@ fn test5() {
         fn f(&self, arg: A) -> B;
     }
 
-    let m = TraitMock::new().expect_f(|arg: String| {
+    let m = MockTrait::new().expect_f(|arg: String| {
         assert_eq!(arg, "1");
         2i32
     });
@@ -71,7 +71,7 @@ fn test6() {
         assert_eq!(arg2, 2f32);
         assert_eq!(arg3, "3");
     }
-    let m = TraitMock::new().expect_f(t);
+    let m = MockTrait::new().expect_f(t);
     m.f(&1, 2f32, "3");
 }
 
@@ -82,7 +82,7 @@ fn test6_2() {
         fn f<'a>(&self, arg1: &'a A, arg2: B, arg3: &'a str);
     }
 
-    let m = TraitMock::new().expect_f(moq::lambda!(
+    let m = MockTrait::new().expect_f(moq::lambda!(
         fn <'a>(arg1: &'a i32, arg2: f32, arg3: &'a str) {
             assert_eq!(arg1, &1);
             assert_eq!(arg2, 2f32);
@@ -102,7 +102,7 @@ fn test7() {
     fn t() -> (&'static i32, f32, &'static str) {
         (&1, 2f32, "3")
     }
-    let m = TraitMock::new().expect_f(t);
+    let m = MockTrait::new().expect_f(t);
     assert_eq!(m.f(), (&1, 2f32, "3"));
 }
 
@@ -113,7 +113,7 @@ fn test7_2() {
         fn f(&self) -> (&'static A, B, &'static str);
     }
 
-    let m = TraitMock::new().expect_f(moq::lambda!(
+    let m = MockTrait::new().expect_f(moq::lambda!(
         fn () -> (&'static i32, f32, &'static str) {
             (&1, 2f32, "3")
         }
@@ -134,7 +134,7 @@ fn test8() {
         assert_eq!(arg3, "3");
         (arg1, arg2, arg3)
     }
-    let m = TraitMock::new().expect_f(t);
+    let m = MockTrait::new().expect_f(t);
     assert_eq!(m.f(&1, 2f32, "3"), (&1, 2f32, "3"));
 }
 
@@ -145,7 +145,7 @@ fn test8_2() {
         fn f<'a>(&self, arg1: &'a A, arg2: B, arg3: &'a str) -> (&'a A, B, &'a str);
     }
 
-    let m = TraitMock::new().expect_f(moq::lambda!(
+    let m = MockTrait::new().expect_f(moq::lambda!(
         fn <'a>(arg1: &'a i32, arg2: f32, arg3: &'a str) -> (&'a i32, f32, &'a str) {
             assert_eq!(arg1, &1);
             assert_eq!(arg2, 2f32);
@@ -188,7 +188,7 @@ fn test9() {
         assert_eq!(arg2, Struct2(2, Struct1("3")));
         (arg1, arg2)
     }
-    let m = TraitMock::new().expect_f(t);
+    let m = MockTrait::new().expect_f(t);
     assert_eq!(
         m.f(Struct1(1), Struct2(2, Struct1("3"))),
         (Struct1(1), Struct2(2, Struct1("3")))
@@ -219,7 +219,7 @@ fn test9_2() {
         fn f(&self, arg1: Struct1<A>, arg2: Struct2<A, B>) -> (Struct1<A>, Struct2<A, B>);
     }
 
-    let m = TraitMock::new().expect_f(moq::lambda!(
+    let m = MockTrait::new().expect_f(moq::lambda!(
         fn (
             arg1: Struct1<i32>,
             arg2: Struct2<i32, &'static str>,

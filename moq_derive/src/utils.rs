@@ -1,32 +1,49 @@
+use crate::attribute::MoqAttribute;
 use crate::context::Context;
 use crate::symbols;
 use if_chain::if_chain;
-use itertools::Itertools;
 use quote::{format_ident, quote};
-use replace_with::{replace_with_or_abort, replace_with_or_abort_and_return};
-use std::borrow::Borrow;
+use replace_with::replace_with_or_abort;
 use syn::punctuated::Punctuated;
-use syn::spanned::Spanned;
 use syn::visit_mut::VisitMut;
 use syn::{
-    parse_quote, visit_mut, AngleBracketedGenericArguments, Attribute, Block, BoundLifetimes, Expr,
-    ExprLit, FnArg, GenericArgument, GenericParam, Generics, Ident, ImplItem, ItemTrait, Lit,
-    MetaNameValue, ParenthesizedGenericArguments, Pat, Path, PathArguments, PathSegment, QSelf,
-    ReturnType, Stmt, Token, TraitItem, TraitItemFn, Type, TypeParamBound, TypePath, WhereClause,
-    WherePredicate,
+    parse_quote, Attribute, BoundLifetimes, Expr, ExprLit, FnArg, GenericArgument, GenericParam,
+    Generics, Ident, ImplItem, ItemTrait, Lit, Meta, MetaNameValue, Path, PathArguments,
+    PathSegment, QSelf, ReturnType, Token, TraitItem, TraitItemFn, Type, TypeParamBound, TypePath,
+    WhereClause, WherePredicate,
 };
 
-pub fn format_mock_ident(trait_ident: &Ident) -> Ident {
-    format_ident!("{}Mock", trait_ident)
+pub fn format_mock_ident(trait_def: &ItemTrait) -> Result<Ident, syn::Error> {
+    let mut has_rename = false;
+    let mut ident = None;
+    for attr in trait_def.attrs.moqified_iter() {
+        let nested_list =
+            attr.parse_args_with(Punctuated::<MoqAttribute, Token![,]>::parse_terminated)?;
+        for nested in nested_list {
+            match nested {
+                // #[moq(rename = "MockIdent")]
+                MoqAttribute::Rename(rename) => {
+                    if has_rename {
+                        return Err(syn::Error::new_spanned(
+                            rename,
+                            "multiple attributes is not allowed",
+                        ));
+                    }
+                    ident = Some(rename.ident);
+                    has_rename = true;
+                }
+                other => return Err(syn::Error::new_spanned(other, "unsupported attribute")),
+            }
+        }
+    }
+    Ok(ident.unwrap_or_else(|| format_ident!("Mock{}", trait_def.ident)))
 }
 
-pub fn format_action_collection_ident(trait_ident: &Ident) -> Ident {
-    let mock_ident = format_mock_ident(trait_ident);
+pub fn format_action_collection_ident(mock_ident: &Ident) -> Ident {
     format_ident!("__{}_ActionCollection", mock_ident)
 }
 
-pub fn format_action_ident(trait_ident: &Ident, func_ident: &Ident) -> Ident {
-    let mock_ident = format_mock_ident(trait_ident);
+pub fn format_action_ident(mock_ident: &Ident, func_ident: &Ident) -> Ident {
     format_ident!("__{}_{}_Action", mock_ident, func_ident)
 }
 
@@ -72,7 +89,7 @@ pub fn make_exp_func_trait_bound(
             FnArg::Typed(pt) => Some(&*pt.ty),
         })
         .cloned()
-        .map(|mut ty| ty.deselfified(cx));
+        .map(|ty| ty.deselfified(cx));
 
     let ret_ty = make_action_call_func_ret(cx, trait_func)?.unwrap_or(parse_quote! { () });
     let lts_bounds: Option<BoundLifetimes> = if lts.is_empty() {
@@ -356,7 +373,7 @@ impl GenericsExt for Generics {
 
 /// Merge two generics inplace into one
 fn merge_generics(dst: &mut Generics, other: Generics) {
-    dst.params.extend(other.params.into_iter());
+    dst.params.extend(other.params);
     match (&mut dst.where_clause, other.where_clause) {
         (Some(dst_where_clause), Some(other_where_clause)) => {
             dst_where_clause
@@ -454,7 +471,7 @@ impl TypeExt for Type {
     }
 }
 
-/// Turns `Self::AssocItem` -> `<TraitMock as Trait>::AssocItem`
+/// Turns `Self::AssocItem` -> `<MockTrait as Trait>::AssocItem`
 struct DeselfifyVisitor<'a> {
     cx: &'a Context,
 }
@@ -475,7 +492,7 @@ impl VisitMut for DeselfifyVisitor<'_> {
         for seg in &mut i.path.segments {
             // If the segment is `Self` (first segment) then init qself with mock struct
             // and set the first segment is trait.
-            // The result will be looks like `Self::AssocItem` -> `<TraitMock<T> as Trait<T>>::AssocItem`
+            // The result will be looks like `Self::AssocItem` -> `<MockTrait<T> as Trait<T>>::AssocItem`
             //
             // If qself is already exists then nothing will happen because `Self` can't be in segments
             if seg.ident == "Self" {
@@ -490,16 +507,16 @@ impl VisitMut for DeselfifyVisitor<'_> {
                     gt_token: <Token![>]>::default(),
                 });
 
-                let trait_segment = if self.cx.trait_generics.params.is_empty() {
+                let trait_segment = if self.cx.trait_def.generics.params.is_empty() {
                     PathSegment {
-                        ident: self.cx.trait_ident.clone(),
+                        ident: self.cx.trait_def.ident.clone(),
                         arguments: PathArguments::None,
                     }
                 } else {
                     let (_trait_impl_generics, trait_ty_generics, _trait_where_clause) =
-                        self.cx.trait_generics.split_for_impl();
+                        self.cx.trait_def.generics.split_for_impl();
                     PathSegment {
-                        ident: self.cx.trait_ident.clone(),
+                        ident: self.cx.trait_def.ident.clone(),
                         arguments: PathArguments::AngleBracketed(
                             parse_quote! { #trait_ty_generics },
                         ),

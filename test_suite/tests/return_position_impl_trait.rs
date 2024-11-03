@@ -22,7 +22,7 @@ fn test1() {
         fn f(&self) -> impl DummyTrait;
     }
 
-    let m = TraitMock::new().expect_f(|| Box::new(42i32) as Box<dyn DummyTrait>);
+    let m = MockTrait::new().expect_f(|| Box::new(42i32) as Box<dyn DummyTrait>);
     assert_eq!(m.f().dummy(), 42);
 }
 
@@ -43,7 +43,7 @@ fn test2() {
         fn f(&self) -> impl DummyTrait;
     }
 
-    let m = TraitMock::new().expect_f(|| 42);
+    let m = MockTrait::new().expect_f(|| 42);
     assert_eq!(m.f().dummy(), 42);
 }
 
@@ -79,7 +79,7 @@ fn test3() {
         fn f(&self) -> impl DummyTrait;
     }
 
-    let m = TraitMock::new().expect_f(|| DummyWrapper(Box::new(42i32) as Box<dyn DummyTrait>));
+    let m = MockTrait::new().expect_f(|| DummyWrapper(Box::new(42i32) as Box<dyn DummyTrait>));
     assert_eq!(m.f().dummy(), 42);
 }
 
@@ -93,7 +93,7 @@ fn test4() {
             R: 'static;
     }
 
-    let m = TraitMock::new()
+    let m = MockTrait::new()
         .expect_f(|| Box::pin(async { 42i32 }) as Pin<Box<dyn Future<Output = i32>>>);
     let _ = m.f::<i32>();
 }

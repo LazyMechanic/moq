@@ -9,7 +9,7 @@ fn test1() {
         }
     }
 
-    let m = TraitMock::new().expect_f1(|| {}).expect_f1(|| {});
+    let m = MockTrait::new().expect_f1(|| {}).expect_f1(|| {});
     m.f1();
     m.f2();
 }
@@ -24,7 +24,7 @@ fn test2() {
         }
     }
 
-    let m = TraitMock::new().expect_f1(|| {}).expect_f2(|| {});
+    let m = MockTrait::new().expect_f1(|| {}).expect_f2(|| {});
     m.f1();
     m.f2();
 }
@@ -41,7 +41,7 @@ async fn test3() {
         }
     }
 
-    let m = TraitMock::new()
+    let m = MockTrait::new()
         .expect_f1(|| async {})
         .expect_f1(|| async {});
     m.f1().await;
@@ -59,7 +59,7 @@ async fn test4() {
         }
     }
 
-    let m = TraitMock::new()
+    let m = MockTrait::new()
         .expect_f1(|| async {})
         .expect_f2(|| async {});
     m.f1().await;

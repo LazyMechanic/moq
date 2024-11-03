@@ -1,3 +1,4 @@
+use quote::IdentFragment;
 use std::fmt::Display;
 use syn::{Ident, Path};
 
@@ -15,6 +16,7 @@ define_symbols! {
     DEFAULT => "default",
     DEFAULT_WITH => "default_with",
     OUTPUT => "output",
+    RENAME => "rename",
 }
 
 #[derive(Copy, Clone)]
@@ -70,6 +72,12 @@ impl<'a> PartialEq<Symbol<'_>> for &'a Path {
 
 impl Display for Symbol<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.0)
+    }
+}
+
+impl IdentFragment for Symbol<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         f.write_str(self.0)
     }
 }
