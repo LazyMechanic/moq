@@ -3,12 +3,9 @@ use crate::context::Context;
 use crate::mock::Mock;
 use proc_macro2_diagnostics::Diagnostic;
 
-use crate::attribute::MoqAttribute;
 use crate::utils::ItemTraitExt;
 use quote::{quote, ToTokens};
-use syn::parse::{Parse, ParseStream, Parser};
-use syn::punctuated::Punctuated;
-use syn::{Attribute, ItemTrait, Token, TraitItem};
+use syn::{ItemTrait, TraitItem};
 
 pub fn automock_impl(
     args: proc_macro2::TokenStream,

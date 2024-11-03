@@ -16,7 +16,6 @@ pub struct Action {
     self_ident: Ident,
     self_generics: Generics,
     func_trait_bound: Punctuated<TypeParamBound, Token![+]>,
-    func_boxed_ty: Type,
     call_asyncness: Option<Token![async]>,
     call_awaiting: Option<(Token![.], Token![await])>,
     call_generics: Generics,
@@ -36,7 +35,6 @@ impl Action {
             trait_gen.merged(func_gen).staticized()
         };
         let func_trait_bound = utils::make_exp_func_trait_bound(cx, trait_func)?;
-        let func_boxed_ty = utils::make_boxed_exp_func(cx, trait_func)?;
 
         let call_asyncness = trait_func.sig.asyncness;
         let call_awaiting = if trait_func.sig.asyncness.is_some() {
@@ -97,7 +95,6 @@ impl Action {
             self_ident,
             self_generics,
             func_trait_bound,
-            func_boxed_ty,
             call_asyncness,
             call_awaiting,
             call_generics,
@@ -115,7 +112,7 @@ impl ToTokens for Action {
         let (self_impl_generics, self_ty_generics, self_where_clause) =
             self.self_generics.split_for_impl();
         let func_trait_bound = &self.func_trait_bound;
-        let func_boxed_ty = &self.func_boxed_ty;
+        let func_boxed_ty: Type = parse_quote! { ::std::boxed::Box<dyn #func_trait_bound> };
         let call_asyncness = &self.call_asyncness;
         let call_awaiting = self
             .call_awaiting
@@ -184,7 +181,12 @@ impl ActionCollection {
 impl ToTokens for ActionCollection {
     fn to_tokens(&self, dst: &mut TokenStream) {
         let ident = &self.ident;
-        let any_ty = utils::make_boxed_any();
+        let any_ty: Type = parse_quote! {
+            ::std::boxed::Box<dyn ::std::any::Any
+                                + ::std::marker::Send
+                                + ::std::marker::Sync
+                                + 'static>
+        };
 
         let def: ItemStruct = parse_quote! {
             #[doc(hidden)]

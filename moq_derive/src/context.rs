@@ -4,7 +4,7 @@ use crate::attribute::MoqAttribute;
 use crate::utils::GenericsExt;
 use syn::parse::Parser;
 use syn::punctuated::Punctuated;
-use syn::{parse_quote, Attribute, Generics, Ident, ItemTrait, Token};
+use syn::{parse_quote, Generics, Ident, ItemTrait, Token};
 
 #[derive(Debug)]
 pub struct Context {

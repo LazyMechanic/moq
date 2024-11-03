@@ -6,9 +6,9 @@ use replace_with::replace_with_or_abort;
 use syn::punctuated::Punctuated;
 use syn::visit_mut::VisitMut;
 use syn::{
-    parse_quote, Attribute, BoundLifetimes, FnArg, GenericParam, Generics, Ident, ImplItem,
-    ItemTrait, PathArguments, PathSegment, QSelf, ReturnType, Token, TraitItem, TraitItemFn, Type,
-    TypeParamBound, TypePath, WhereClause, WherePredicate,
+    parse_quote, visit_mut, Attribute, BoundLifetimes, FnArg, GenericParam, Generics, Ident,
+    ImplItem, ItemTrait, PathArguments, PathSegment, QSelf, ReturnType, Token, TraitItem,
+    TraitItemFn, Type, TypeParamBound, TypePath, WhereClause, WherePredicate,
 };
 
 pub fn format_mock_ident(trait_def: &ItemTrait) -> Result<Ident, syn::Error> {
@@ -37,23 +37,6 @@ pub fn format_action_collection_ident(mock_ident: &Ident) -> Ident {
 
 pub fn format_action_ident(mock_ident: &Ident, func_ident: &Ident) -> Ident {
     format_ident!("__{}_{}_Action", mock_ident, func_ident)
-}
-
-/// Generate `Box<dyn Any>` type
-pub fn make_boxed_any() -> Type {
-    parse_quote! {
-        ::std::boxed::Box<dyn ::std::any::Any
-                            + ::std::marker::Send
-                            + ::std::marker::Sync
-                            + 'static>
-    }
-}
-
-/// Generate `Box<dyn Func/AsyncFunc>` type
-pub fn make_boxed_exp_func(cx: &Context, trait_func: &TraitItemFn) -> Result<Type, syn::Error> {
-    let bound = make_exp_func_trait_bound(cx, trait_func)?;
-    let ty = parse_quote! { ::std::boxed::Box<dyn #bound> };
-    Ok(ty)
 }
 
 /// Generate `Func/AsyncFunc + Send + 'static` trait bound
@@ -166,25 +149,8 @@ impl TraitItemExt for TraitItem {
     }
 
     fn demoqify(&mut self) {
-        replace_with_or_abort(self, |this| match this {
-            TraitItem::Const(mut item) => {
-                item.attrs.demoqify();
-                TraitItem::Const(item)
-            }
-            TraitItem::Fn(mut item) => {
-                item.attrs.demoqify();
-                TraitItem::Fn(item)
-            }
-            TraitItem::Type(mut item) => {
-                item.attrs.demoqify();
-                TraitItem::Type(item)
-            }
-            TraitItem::Macro(mut item) => {
-                item.attrs.demoqify();
-                TraitItem::Macro(item)
-            }
-            item => item,
-        });
+        let mut vis = DemoqifyVisitor;
+        vis.visit_trait_item_mut(self);
     }
 }
 
@@ -202,8 +168,8 @@ impl ItemTraitExt for ItemTrait {
     }
 
     fn demoqify(&mut self) {
-        self.attrs.demoqify();
-        self.items.iter_mut().for_each(|item| item.demoqify());
+        let mut vis = DemoqifyVisitor;
+        vis.visit_item_trait_mut(self);
     }
 }
 
@@ -248,11 +214,8 @@ impl AttributesExt for Vec<Attribute> {
     }
 
     fn moqify(&mut self) {
-        replace_with_or_abort(self, |this| {
-            this.into_iter()
-                .filter(|attr| attr.path() == symbols::MOQ)
-                .collect()
-        });
+        let mut vis = MoqifyVisitor;
+        vis.visit_attributes_mut(self);
     }
 
     fn demoqified_iter(&self) -> impl Iterator<Item = &Attribute> {
@@ -265,11 +228,8 @@ impl AttributesExt for Vec<Attribute> {
     }
 
     fn demoqify(&mut self) {
-        replace_with_or_abort(self, |this| {
-            this.into_iter()
-                .filter(|attr| attr.path() != symbols::MOQ)
-                .collect()
-        });
+        let mut vis = DemoqifyVisitor;
+        vis.visit_attributes_mut(self);
     }
 }
 
@@ -351,49 +311,59 @@ fn merge_generics(dst: &mut Generics, other: Generics) {
 }
 
 fn lifetimify_generics(gen: &mut Generics) {
-    gen.params = std::mem::take(&mut gen.params)
-        .into_iter()
-        .filter(|p| matches!(p, GenericParam::Lifetime(_)))
-        .collect();
-
-    gen.where_clause = std::mem::take(&mut gen.where_clause).map(|mut wc| {
-        wc.predicates = wc
-            .predicates
+    replace_with_or_abort(gen, |mut gen| {
+        gen.params = gen
+            .params
             .into_iter()
-            .filter_map(|pred| match pred {
-                x @ WherePredicate::Lifetime(_) => Some(x),
-                _ => None,
-            })
+            .filter(|p| matches!(p, GenericParam::Lifetime(_)))
             .collect();
-        wc
+
+        gen.where_clause = gen.where_clause.map(|mut wc| {
+            wc.predicates = wc
+                .predicates
+                .into_iter()
+                .filter_map(|pred| match pred {
+                    x @ WherePredicate::Lifetime(_) => Some(x),
+                    _ => None,
+                })
+                .collect();
+            wc
+        });
+
+        gen
     });
 }
 
 /// Removes lifetimes from generics
 fn delifetimify_generics(gen: &mut Generics) {
-    gen.params = std::mem::take(&mut gen.params)
-        .into_iter()
-        .filter(|p| !matches!(p, GenericParam::Lifetime(_)))
-        .collect();
-
-    gen.where_clause = std::mem::take(&mut gen.where_clause).map(|mut wc| {
-        wc.predicates = wc
-            .predicates
+    replace_with_or_abort(gen, |mut gen| {
+        gen.params = gen
+            .params
             .into_iter()
-            .filter_map(|pred| match pred {
-                WherePredicate::Type(mut ty) => {
-                    ty.bounds = ty
-                        .bounds
-                        .into_iter()
-                        .filter(|bound| !matches!(bound, TypeParamBound::Lifetime(_)))
-                        .collect();
-                    Some(WherePredicate::Type(ty))
-                }
-                WherePredicate::Lifetime(_) => None,
-                _ => None,
-            })
+            .filter(|p| !matches!(p, GenericParam::Lifetime(_)))
             .collect();
-        wc
+
+        gen.where_clause = gen.where_clause.map(|mut wc| {
+            wc.predicates = wc
+                .predicates
+                .into_iter()
+                .filter_map(|pred| match pred {
+                    WherePredicate::Type(mut ty) => {
+                        ty.bounds = ty
+                            .bounds
+                            .into_iter()
+                            .filter(|bound| !matches!(bound, TypeParamBound::Lifetime(_)))
+                            .collect();
+                        Some(WherePredicate::Type(ty))
+                    }
+                    WherePredicate::Lifetime(_) => None,
+                    _ => None,
+                })
+                .collect();
+            wc
+        });
+
+        gen
     });
 }
 
@@ -432,6 +402,30 @@ impl TypeExt for Type {
     }
 }
 
+struct DemoqifyVisitor;
+
+impl VisitMut for DemoqifyVisitor {
+    fn visit_attributes_mut(&mut self, i: &mut Vec<Attribute>) {
+        replace_with_or_abort(i, |i| {
+            i.into_iter()
+                .filter(|attr| attr.path() != symbols::MOQ)
+                .collect()
+        });
+    }
+}
+
+struct MoqifyVisitor;
+
+impl VisitMut for MoqifyVisitor {
+    fn visit_attributes_mut(&mut self, i: &mut Vec<Attribute>) {
+        replace_with_or_abort(i, |i| {
+            i.into_iter()
+                .filter(|attr| attr.path() == symbols::MOQ)
+                .collect()
+        });
+    }
+}
+
 /// Turns `Self::AssocItem` -> `<MockTrait as Trait>::AssocItem`
 struct DeselfifyVisitor<'a> {
     cx: &'a Context,
@@ -446,10 +440,6 @@ impl VisitMut for DeselfifyVisitor<'_> {
     }
 
     fn visit_type_path_mut(&mut self, i: &mut TypePath) {
-        if let Some(qself) = &mut i.qself {
-            self.visit_qself_mut(qself);
-        }
-
         for seg in &mut i.path.segments {
             // If the segment is `Self` (first segment) then init qself with mock struct
             // and set the first segment is trait.
@@ -488,5 +478,8 @@ impl VisitMut for DeselfifyVisitor<'_> {
                 *seg = trait_segment;
             }
         }
+
+        // Delegate to the default impl to visit nested expressions.
+        visit_mut::visit_type_path_mut(self, i);
     }
 }
