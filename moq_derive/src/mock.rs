@@ -1,5 +1,5 @@
 use crate::context::Context;
-use crate::{symbols, utils};
+use crate::utils;
 use itertools::Itertools;
 
 use crate::attribute::{
@@ -12,9 +12,8 @@ use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::{
     parse_quote, Attribute, Block, Expr, ExprLit, FnArg, GenericParam, Generics, Ident, ImplItem,
-    ImplItemConst, ImplItemFn, ImplItemType, ItemImpl, ItemStruct, Lit, Meta, MetaNameValue, Pat,
-    Path, Token, TraitItem, TraitItemConst, TraitItemFn, TraitItemType, Type, Visibility,
-    WhereClause,
+    ImplItemConst, ImplItemFn, ImplItemType, ItemImpl, ItemStruct, Lit, Pat, Path, Token,
+    TraitItem, TraitItemConst, TraitItemFn, TraitItemType, Type, Visibility, WhereClause,
 };
 
 #[derive(Debug)]
@@ -292,28 +291,30 @@ fn trait_type(trait_ty: &TraitItemType) -> Result<ImplItemType, syn::Error> {
     let moq_attrs_iter = trait_ty.attrs.moqified_iter();
     let other_attrs = trait_ty.attrs.demoqified_iter().cloned().collect();
 
+    let mut attr_present = AttributePresent::default();
     let mut ty = None;
     for attr in moq_attrs_iter {
         let nested_list =
-            attr.parse_args_with(Punctuated::<MetaNameValue, Token![,]>::parse_terminated)?;
+            attr.parse_args_with(Punctuated::<MoqAttribute, Token![,]>::parse_terminated)?;
         for nested in nested_list {
-            if nested.path == symbols::DEFAULT {
-                // #[moq(default = "::path::to::Type")]
-                match nested.value {
-                    Expr::Lit(ExprLit {
-                        lit: Lit::Str(lit), ..
-                    }) => {
-                        ty = Some(lit.parse()?);
-                    }
-                    other => {
-                        return Err(syn::Error::new_spanned(
-                            other,
-                            "unsupported attribute value format",
-                        ))
+            match nested {
+                MoqAttribute::Default(default) => {
+                    attr_present.check_and_hit(&default)?;
+                    match default {
+                        DefaultAttribute::Expr(Expr::Lit(ExprLit {
+                            lit: Lit::Str(lit), ..
+                        })) => {
+                            ty = Some(lit.parse()?);
+                        }
+                        other => {
+                            return Err(syn::Error::new_spanned(
+                                other,
+                                "expected value as string literal with type",
+                            ))
+                        }
                     }
                 }
-            } else {
-                return Err(syn::Error::new_spanned(nested, "unsupported attribute"));
+                other => return Err(other.unsupported_error()),
             }
         }
     }
@@ -372,24 +373,30 @@ fn trait_func(cx: &Context, func: &TraitItemFn) -> Result<ImplItemFn, syn::Error
     let func_block = match &func.default {
         None => trait_func_block(cx, func)?,
         Some(def_block) => {
-            let mut use_default = false;
+            let mut attr_present = AttributePresent::default();
+            let mut block = None;
             for attr in func_moq_attrs_iter {
                 let nested_list =
-                    attr.parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated)?;
+                    attr.parse_args_with(Punctuated::<MoqAttribute, Token![,]>::parse_terminated)?;
                 for nested in nested_list {
-                    if nested.path() == symbols::DEFAULT {
-                        // #[moq(default)]
-                        use_default = true;
-                    } else {
-                        return Err(syn::Error::new_spanned(nested, "unsupported attribute"));
+                    match nested {
+                        MoqAttribute::Default(attr) => {
+                            attr_present.check_and_hit(&attr)?;
+                            match attr {
+                                DefaultAttribute::Flag => block = Some(def_block.clone()),
+                                other => {
+                                    return Err(syn::Error::new_spanned(other, "unexpected value"))
+                                }
+                            }
+                        }
+                        other => return Err(other.unsupported_error()),
                     }
                 }
             }
 
-            if use_default {
-                def_block.clone()
-            } else {
-                trait_func_block(cx, func)?
+            match block {
+                None => trait_func_block(cx, func)?,
+                Some(b) => b,
             }
         }
     };
