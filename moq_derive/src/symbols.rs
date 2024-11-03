@@ -19,7 +19,7 @@ define_symbols! {
     RENAME => "rename",
 }
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct Symbol<'a>(&'a str);
 
 impl<'a> Symbol<'a> {

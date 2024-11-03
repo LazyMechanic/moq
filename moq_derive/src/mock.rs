@@ -2,6 +2,9 @@ use crate::context::Context;
 use crate::{symbols, utils};
 use itertools::Itertools;
 
+use crate::attribute::{
+    AttributePresent, DefaultAttribute, DefaultWithAttribute, MoqAttribute, Symboled,
+};
 use crate::utils::{AttributesExt, GenericsExt, ImplItemExt};
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote, ToTokens};
@@ -228,32 +231,35 @@ fn trait_const(trait_cst: &TraitItemConst) -> Result<ImplItemConst, syn::Error> 
     let moq_attrs_iter = trait_cst.attrs.moqified_iter();
     let other_attrs = trait_cst.attrs.demoqified_iter().cloned().collect();
 
+    let mut attr_present = AttributePresent::default();
+
     let mut expr = None;
     for attr in moq_attrs_iter {
         let nested_list =
-            attr.parse_args_with(Punctuated::<MetaNameValue, Token![,]>::parse_terminated)?;
+            attr.parse_args_with(Punctuated::<MoqAttribute, Token![,]>::parse_terminated)?;
         for nested in nested_list {
-            if nested.path == symbols::DEFAULT {
+            match nested {
                 // #[moq(default = "123")]
-                expr = Some(nested.value);
-            } else if nested.path == symbols::DEFAULT_WITH {
-                // #[moq(default_with = "::path::to::func")]
-                match nested.value {
-                    Expr::Lit(ExprLit {
-                        lit: Lit::Str(lit), ..
-                    }) => {
-                        let fn_path = lit.parse::<Path>()?;
-                        expr = Some(parse_quote!( #fn_path() ));
-                    }
-                    other => {
-                        return Err(syn::Error::new_spanned(
-                            other,
-                            "unsupported attribute value format",
-                        ))
+                MoqAttribute::Default(attr) => {
+                    attr_present.check_and_hit(&attr)?;
+                    attr_present.check(&DefaultWithAttribute::symbol(), attr.span())?;
+
+                    match attr {
+                        DefaultAttribute::Expr(attr_expr) => {
+                            expr = Some(parse_quote! { #attr_expr });
+                        }
+                        other => return Err(other.unsupported_error()),
                     }
                 }
-            } else {
-                return Err(syn::Error::new_spanned(nested, "unsupported attribute"));
+                // #[moq(default_with = "::path::to::func")]
+                MoqAttribute::DefaultWith(attr) => {
+                    attr_present.check_and_hit(&attr)?;
+                    attr_present.check(&DefaultAttribute::symbol(), attr.span())?;
+
+                    let attr_path = attr.path;
+                    expr = Some(parse_quote! { #attr_path() })
+                }
+                other => return Err(other.unsupported_error()),
             }
         }
     }

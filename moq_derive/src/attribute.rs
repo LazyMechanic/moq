@@ -1,12 +1,55 @@
 use crate::symbols;
 use crate::symbols::Symbol;
 use if_chain::if_chain;
-use proc_macro2::TokenStream;
+use proc_macro2::{Span, TokenStream};
 use quote::{format_ident, quote, ToTokens};
+use std::collections::HashSet;
 use syn::parse::{Parse, ParseStream};
 use syn::spanned::Spanned;
 use syn::{parse_quote, Expr, GenericArgument, LitStr, Path, PathArguments, Token, Type};
 use syn::{Ident, Meta};
+
+#[derive(Debug, Default)]
+pub struct AttributePresent<'a> {
+    set: HashSet<Symbol<'a>>,
+}
+
+impl<'a> AttributePresent<'a> {
+    pub fn check_and_hit<A>(&mut self, attr: A) -> Result<(), syn::Error>
+    where
+        A: ToTokens + Symboled,
+    {
+        let symbol = <A as Symboled>::symbol();
+        self.check(&symbol, attr.span())?;
+        self.hit(symbol);
+        Ok(())
+    }
+
+    pub fn check(&self, symbol: &Symbol<'a>, span: Span) -> Result<(), syn::Error> {
+        if self.set.contains(symbol) {
+            Err(syn::Error::new(span, "attribute already present"))
+        } else {
+            Ok(())
+        }
+    }
+
+    pub fn hit(&mut self, symbol: Symbol<'a>) {
+        self.set.insert(symbol);
+    }
+}
+
+pub trait Symboled {
+    fn symbol() -> Symbol<'static>;
+}
+
+impl<'a, T> Symboled for &'a T
+where
+    T: ?Sized + Symboled,
+{
+    fn symbol() -> Symbol<'static> {
+        T::symbol()
+    }
+}
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum MoqAttribute {
@@ -16,9 +59,15 @@ pub enum MoqAttribute {
     Rename(RenameAttribute),
 }
 
-impl MoqAttribute {
-    pub fn symbol(&self) -> Symbol<'static> {
+impl Symboled for MoqAttribute {
+    fn symbol() -> Symbol<'static> {
         symbols::MOQ
+    }
+}
+
+impl MoqAttribute {
+    pub fn unsupported_error(&self) -> syn::Error {
+        syn::Error::new_spanned(self, "unsupported attribute")
     }
 }
 
@@ -59,12 +108,17 @@ impl ToTokens for MoqAttribute {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum DefaultAttribute {
     Flag,
-    Path(Path),
     Expr(Expr),
 }
 
 impl DefaultAttribute {
-    pub fn symbol() -> Symbol<'static> {
+    pub fn unsupported_error(&self) -> syn::Error {
+        syn::Error::new_spanned(self, "unsupported attribute")
+    }
+}
+
+impl Symboled for DefaultAttribute {
+    fn symbol() -> Symbol<'static> {
         symbols::DEFAULT
     }
 }
@@ -80,17 +134,9 @@ impl Parse for DefaultAttribute {
         }
 
         if input.peek(Token![=]) {
-            let lit = input.parse::<LitStr>()?;
-            if let Ok(path) = lit.parse::<Path>() {
-                Ok(DefaultAttribute::Path(path))
-            } else if let Ok(expr) = input.parse::<Expr>() {
-                Ok(DefaultAttribute::Expr(expr))
-            } else {
-                Err(syn::Error::new_spanned(
-                    lit,
-                    "wrong value format, only path or expression allowed",
-                ))
-            }
+            let _ = input.parse::<Token![=]>()?;
+            let expr = input.parse::<Expr>()?;
+            Ok(DefaultAttribute::Expr(expr))
         } else {
             Ok(DefaultAttribute::Flag)
         }
@@ -104,14 +150,6 @@ impl ToTokens for DefaultAttribute {
                 let symbol = format_ident!("{}", Self::symbol());
 
                 let v = quote! { #symbol };
-                v.to_tokens(tokens);
-            }
-            DefaultAttribute::Path(path) => {
-                let symbol = format_ident!("{}", Self::symbol());
-                let path_str = quote! { #path }.to_string();
-                let lit = LitStr::new(&path_str, path.span());
-
-                let v = quote! { #symbol = #lit };
                 v.to_tokens(tokens);
             }
             DefaultAttribute::Expr(expr) => {
@@ -134,7 +172,13 @@ pub struct DefaultWithAttribute {
 }
 
 impl DefaultWithAttribute {
-    pub fn symbol() -> Symbol<'static> {
+    pub fn unsupported_error(&self) -> syn::Error {
+        syn::Error::new_spanned(self, "unsupported attribute")
+    }
+}
+
+impl Symboled for DefaultWithAttribute {
+    fn symbol() -> Symbol<'static> {
         symbols::DEFAULT_WITH
     }
 }
@@ -178,7 +222,13 @@ pub enum OutputAttribute {
 }
 
 impl OutputAttribute {
-    pub fn symbol() -> Symbol<'static> {
+    pub fn unsupported_error(&self) -> syn::Error {
+        syn::Error::new_spanned(self, "unsupported attribute")
+    }
+}
+
+impl Symboled for OutputAttribute {
+    fn symbol() -> Symbol<'static> {
         symbols::OUTPUT
     }
 }
@@ -253,7 +303,13 @@ pub struct RenameAttribute {
 }
 
 impl RenameAttribute {
-    pub fn symbol() -> Symbol<'static> {
+    pub fn unsupported_error(&self) -> syn::Error {
+        syn::Error::new_spanned(self, "unsupported attribute")
+    }
+}
+
+impl Symboled for RenameAttribute {
+    fn symbol() -> Symbol<'static> {
         symbols::RENAME
     }
 }

@@ -1,20 +1,18 @@
-use crate::attribute::{MoqAttribute, OutputAttribute};
+use crate::attribute::{AttributePresent, MoqAttribute, OutputAttribute};
 use crate::context::Context;
 use crate::symbols;
-use if_chain::if_chain;
-use quote::{format_ident, quote};
+use quote::format_ident;
 use replace_with::replace_with_or_abort;
 use syn::punctuated::Punctuated;
 use syn::visit_mut::VisitMut;
 use syn::{
-    parse_quote, Attribute, BoundLifetimes, Expr, ExprLit, FnArg, GenericArgument, GenericParam,
-    Generics, Ident, ImplItem, ItemTrait, Lit, Meta, MetaNameValue, Path, PathArguments,
-    PathSegment, QSelf, ReturnType, Token, TraitItem, TraitItemFn, Type, TypeParamBound, TypePath,
-    WhereClause, WherePredicate,
+    parse_quote, Attribute, BoundLifetimes, FnArg, GenericParam, Generics, Ident, ImplItem,
+    ItemTrait, PathArguments, PathSegment, QSelf, ReturnType, Token, TraitItem, TraitItemFn, Type,
+    TypeParamBound, TypePath, WhereClause, WherePredicate,
 };
 
 pub fn format_mock_ident(trait_def: &ItemTrait) -> Result<Ident, syn::Error> {
-    let mut has_rename = false;
+    let mut attr_present = AttributePresent::default();
     let mut ident = None;
     for attr in trait_def.attrs.moqified_iter() {
         let nested_list =
@@ -22,17 +20,11 @@ pub fn format_mock_ident(trait_def: &ItemTrait) -> Result<Ident, syn::Error> {
         for nested in nested_list {
             match nested {
                 // #[moq(rename = "MockIdent")]
-                MoqAttribute::Rename(rename) => {
-                    if has_rename {
-                        return Err(syn::Error::new_spanned(
-                            rename,
-                            "multiple attributes is not allowed",
-                        ));
-                    }
-                    ident = Some(rename.ident);
-                    has_rename = true;
+                MoqAttribute::Rename(attr) => {
+                    attr_present.check_and_hit(&attr)?;
+                    ident = Some(attr.ident);
                 }
-                other => return Err(syn::Error::new_spanned(other, "unsupported attribute")),
+                other => return Err(other.unsupported_error()),
             }
         }
     }
@@ -126,7 +118,7 @@ pub fn make_action_call_func_ret(
                 let bounds = &ty.bounds;
 
                 let default_ty: Type = parse_quote!( ::std::boxed::Box<dyn #bounds> );
-                let mut has_output = false;
+                let mut attr_present = AttributePresent::default();
                 let mut ret_ty = None;
                 for attr in moq_attrs_iter {
                     let nested_list = attr
@@ -134,12 +126,7 @@ pub fn make_action_call_func_ret(
                     for nested in nested_list {
                         match nested {
                             MoqAttribute::Output(attr) => {
-                                if has_output {
-                                    return Err(syn::Error::new_spanned(
-                                        attr,
-                                        "multiple attributes is not allowed",
-                                    ));
-                                }
+                                attr_present.check_and_hit(&attr)?;
 
                                 match attr {
                                     OutputAttribute::FullPath(path) => {
@@ -150,9 +137,7 @@ pub fn make_action_call_func_ret(
                                     }
                                 }
                             }
-                            other => {
-                                return Err(syn::Error::new_spanned(other, "unsupported attribute"))
-                            }
+                            other => return Err(other.unsupported_error()),
                         }
                     }
                 }
