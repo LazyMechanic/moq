@@ -2,6 +2,7 @@ use crate::utils;
 
 use crate::attribute::MoqAttribute;
 use crate::utils::GenericsExt;
+use crate::validate::validate;
 use syn::parse::Parser;
 use syn::punctuated::Punctuated;
 use syn::{parse_quote, Generics, Ident, ItemTrait, Token};
@@ -34,6 +35,8 @@ impl Context {
                 _ => { /* do nothing */ }
             }
         }
+
+        validate(&mut trait_def)?;
 
         let mock_ident = utils::format_mock_ident(&trait_def)?;
         let mock_generics = trait_def.generics.clone().delifetimified().staticized();

@@ -5,6 +5,7 @@ mod context;
 mod mock;
 mod symbols;
 mod utils;
+mod validate;
 
 use crate::automock_macro::automock_impl;
 use proc_macro::TokenStream;
