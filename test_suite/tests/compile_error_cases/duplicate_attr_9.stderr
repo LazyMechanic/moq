@@ -1,0 +1,5 @@
+error: duplicate moq attribute: `default`
+ --> tests/compile_error_cases/duplicate_attr_9.rs:3:20
+  |
+3 |     #[moq(default, default)]
+  |                    ^^^^^^^

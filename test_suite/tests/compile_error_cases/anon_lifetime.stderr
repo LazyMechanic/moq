@@ -1,0 +1,5 @@
+error: anonymized lifetimes not supported
+ --> tests/compile_error_cases/anon_lifetime.rs:3:23
+  |
+3 |     fn f(&self, arg: &'_ i32);
+  |                       ^^

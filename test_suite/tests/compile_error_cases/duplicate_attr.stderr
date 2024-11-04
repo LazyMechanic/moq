@@ -1,0 +1,5 @@
+error: duplicate moq attribute: `default`
+ --> tests/compile_error_cases/duplicate_attr.rs:3:28
+  |
+3 |     #[moq(default = "i32", default = "i64")]
+  |                            ^^^^^^^^^^^^^^^

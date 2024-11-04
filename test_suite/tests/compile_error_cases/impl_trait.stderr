@@ -1,0 +1,5 @@
+error: `impl Trait` in argument position not supported, use generics `T: Trait` instead
+ --> tests/compile_error_cases/impl_trait.rs:5:17
+  |
+5 |     fn f(&self, _: impl DummyTrait);
+  |                 ^^^^^^^^^^^^^^^^^^

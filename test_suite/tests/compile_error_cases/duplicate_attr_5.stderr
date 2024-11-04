@@ -1,0 +1,5 @@
+error: conflict moq attributes: `default` and `default_with`
+ --> tests/compile_error_cases/duplicate_attr_5.rs:7:24
+  |
+7 |     #[moq(default = 1, default_with = "def")]
+  |                        ^^^^^^^^^^^^^^^^^^^^

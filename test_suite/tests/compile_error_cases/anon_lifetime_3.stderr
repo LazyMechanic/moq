@@ -1,0 +1,5 @@
+error: anonymized lifetimes not supported
+ --> tests/compile_error_cases/anon_lifetime_3.rs:5:33
+  |
+5 |     fn f(&self) -> DummyWrapper<'_>;
+  |                                 ^^
