@@ -2,11 +2,13 @@ use crate::symbols;
 use crate::symbols::Symbol;
 use if_chain::if_chain;
 use proc_macro2::{Span, TokenStream};
-use quote::{format_ident, quote, ToTokens};
+use quote::ToTokens;
 use std::collections::HashSet;
 use syn::parse::{Parse, ParseStream};
 use syn::spanned::Spanned;
-use syn::{parse_quote, Expr, GenericArgument, LitStr, Path, PathArguments, Token, Type};
+use syn::{
+    parse_quote, Expr, ExprLit, GenericArgument, Lit, MetaNameValue, Path, PathArguments, Type,
+};
 use syn::{Ident, Meta};
 
 #[derive(Debug, Default)]
@@ -15,9 +17,9 @@ pub struct AttributePresent<'a> {
 }
 
 impl<'a> AttributePresent<'a> {
-    pub fn check_and_hit<A>(&mut self, attr: A) -> Result<(), syn::Error>
+    pub fn check_and_hit<A>(&mut self, attr: &A) -> Result<(), syn::Error>
     where
-        A: ToTokens + Symboled,
+        A: Spanned + Symboled,
     {
         let symbol = <A as Symboled>::symbol();
         self.check(&symbol, attr.span())?;
@@ -27,7 +29,26 @@ impl<'a> AttributePresent<'a> {
 
     pub fn check(&self, symbol: &Symbol<'a>, span: Span) -> Result<(), syn::Error> {
         if self.set.contains(symbol) {
-            Err(syn::Error::new(span, "attribute already present"))
+            Err(syn::Error::new(
+                span,
+                format_args!("duplicate moq attribute: `{symbol}`",),
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
+    pub fn check_conflict(
+        &self,
+        maybe_present: &Symbol<'a>,
+        new: &Symbol<'a>,
+        span: Span,
+    ) -> Result<(), syn::Error> {
+        if self.set.contains(maybe_present) {
+            Err(syn::Error::new(
+                span,
+                format_args!("conflict moq attributes: `{maybe_present}` and `{new}`",),
+            ))
         } else {
             Ok(())
         }
@@ -42,16 +63,7 @@ pub trait Symboled {
     fn symbol() -> Symbol<'static>;
 }
 
-impl<'a, T> Symboled for &'a T
-where
-    T: ?Sized + Symboled,
-{
-    fn symbol() -> Symbol<'static> {
-        T::symbol()
-    }
-}
-
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum MoqAttribute {
     Default(DefaultAttribute),
     DefaultWith(DefaultWithAttribute),
@@ -105,13 +117,27 @@ impl ToTokens for MoqAttribute {
 
 // ======================= DefaultAttribute ======================= //
 
+#[derive(Debug, Clone)]
+pub struct DefaultAttribute {
+    value: DefaultAttributeValue,
+    raw: Meta,
+}
+
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub enum DefaultAttribute {
+pub enum DefaultAttributeValue {
     Flag,
     Expr(Expr),
 }
 
 impl DefaultAttribute {
+    pub fn value(&self) -> &DefaultAttributeValue {
+        &self.value
+    }
+
+    pub fn into_value(self) -> DefaultAttributeValue {
+        self.value
+    }
+
     pub fn unsupported_error(&self) -> syn::Error {
         syn::Error::new_spanned(self, "unsupported attribute")
     }
@@ -125,53 +151,51 @@ impl Symboled for DefaultAttribute {
 
 impl Parse for DefaultAttribute {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let symbol = input.parse::<Ident>()?;
-        if symbol != Self::symbol() {
+        let raw = input.parse::<Meta>()?;
+        if raw.path() != Self::symbol() {
             return Err(syn::Error::new_spanned(
-                symbol,
+                raw.path(),
                 format_args!("'{}' expected", Self::symbol()),
             ));
         }
 
-        if input.peek(Token![=]) {
-            let _ = input.parse::<Token![=]>()?;
-            let expr = input.parse::<Expr>()?;
-            Ok(DefaultAttribute::Expr(expr))
-        } else {
-            Ok(DefaultAttribute::Flag)
+        match &raw {
+            Meta::Path(_) => Ok(Self {
+                value: DefaultAttributeValue::Flag,
+                raw,
+            }),
+            Meta::NameValue(meta) => Ok(Self {
+                value: DefaultAttributeValue::Expr(meta.value.clone()),
+                raw,
+            }),
+            other => Err(syn::Error::new_spanned(other, "unsupported attribute")),
         }
     }
 }
 
 impl ToTokens for DefaultAttribute {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        match self {
-            DefaultAttribute::Flag => {
-                let symbol = format_ident!("{}", Self::symbol());
-
-                let v = quote! { #symbol };
-                v.to_tokens(tokens);
-            }
-            DefaultAttribute::Expr(expr) => {
-                let symbol = format_ident!("{}", Self::symbol());
-                let expr_str = quote! { #expr }.to_string();
-                let lit = LitStr::new(&expr_str, expr.span());
-
-                let v = quote! { #symbol = #lit };
-                v.to_tokens(tokens);
-            }
-        }
+        self.raw.to_tokens(tokens);
     }
 }
 
 // ======================= DefaultWithAttribute ======================= //
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct DefaultWithAttribute {
-    pub path: Path,
+    value: Path,
+    raw: MetaNameValue,
 }
 
 impl DefaultWithAttribute {
+    pub fn value(&self) -> &Path {
+        &self.value
+    }
+
+    pub fn into_value(self) -> Path {
+        self.value
+    }
+
     pub fn unsupported_error(&self) -> syn::Error {
         syn::Error::new_spanned(self, "unsupported attribute")
     }
@@ -185,43 +209,60 @@ impl Symboled for DefaultWithAttribute {
 
 impl Parse for DefaultWithAttribute {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let symbol = input.parse::<Ident>()?;
-        if symbol != Self::symbol() {
+        let raw = input.parse::<MetaNameValue>()?;
+
+        if raw.path != Self::symbol() {
             return Err(syn::Error::new_spanned(
-                symbol,
+                &raw.path,
                 format_args!("'{}' expected", Self::symbol()),
             ));
         }
 
-        let _ = input.parse::<Token![=]>()?;
-        let lit = input.parse::<LitStr>()?;
+        let Expr::Lit(ExprLit {
+            lit: Lit::Str(lit), ..
+        }) = &raw.value
+        else {
+            return Err(syn::Error::new_spanned(
+                &raw.value,
+                "expected string literal",
+            ));
+        };
+
         let path = lit.parse::<Path>()?;
 
-        Ok(DefaultWithAttribute { path })
+        Ok(Self { value: path, raw })
     }
 }
 
 impl ToTokens for DefaultWithAttribute {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        let symbol = format_ident!("{}", Self::symbol());
-        let path = &self.path;
-        let path_str = quote! { #path }.to_string();
-        let lit = LitStr::new(&path_str, path.span());
-
-        let v = quote! { #symbol = #lit };
-        v.to_tokens(tokens);
+        self.raw.to_tokens(tokens);
     }
 }
 
 // ======================= OutputAttribute ======================= //
 
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub enum OutputAttribute {
+#[derive(Debug, Clone)]
+pub struct OutputAttribute {
+    value: OutputAttributeValue,
+    raw: MetaNameValue,
+}
+
+#[derive(Debug, Clone)]
+pub enum OutputAttributeValue {
     FullPath(Path),
     InferPath(Path),
 }
 
 impl OutputAttribute {
+    pub fn value(&self) -> &OutputAttributeValue {
+        &self.value
+    }
+
+    pub fn into_value(self) -> OutputAttributeValue {
+        self.value
+    }
+
     pub fn unsupported_error(&self) -> syn::Error {
         syn::Error::new_spanned(self, "unsupported attribute")
     }
@@ -235,16 +276,24 @@ impl Symboled for OutputAttribute {
 
 impl Parse for OutputAttribute {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let symbol = input.parse::<Ident>()?;
-        if symbol != Self::symbol() {
+        let raw = input.parse::<MetaNameValue>()?;
+        if raw.path != Self::symbol() {
             return Err(syn::Error::new_spanned(
-                symbol,
+                &raw.path,
                 format_args!("'{}' expected", Self::symbol()),
             ));
         }
 
-        let _ = input.parse::<Token![=]>()?;
-        let lit = input.parse::<LitStr>()?;
+        let Expr::Lit(ExprLit {
+            lit: Lit::Str(lit), ..
+        }) = &raw.value
+        else {
+            return Err(syn::Error::new_spanned(
+                &raw.value,
+                "expected string literal",
+            ));
+        };
+
         let mut path = lit.parse::<Path>()?;
 
         let span = path.segments.span();
@@ -263,10 +312,12 @@ impl Parse for OutputAttribute {
             then {
                 // #[moq(return = "::path::to::InferType<_>")]
                 last_segment.arguments = PathArguments::None;
-                Ok(OutputAttribute::InferPath(parse_quote! { #path }))
+                let value = OutputAttributeValue::InferPath(parse_quote! { #path });
+                Ok(Self { value, raw })
             } else {
                 // #[moq(return = "::path::to::FullType")]
-                Ok(OutputAttribute::FullPath(path))
+                let value = OutputAttributeValue::FullPath(path);
+                Ok(Self { value, raw })
             }
         }
     }
@@ -274,35 +325,27 @@ impl Parse for OutputAttribute {
 
 impl ToTokens for OutputAttribute {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        match self {
-            OutputAttribute::FullPath(path) => {
-                let symbol = format_ident!("{}", Self::symbol());
-                let path_str = quote! { #path }.to_string();
-                let lit = LitStr::new(&path_str, path.span());
-
-                let v = quote! { #symbol = #lit };
-                v.to_tokens(tokens);
-            }
-            OutputAttribute::InferPath(path) => {
-                let symbol = format_ident!("{}", Self::symbol());
-                let path_str = quote! { #path<_> }.to_string();
-                let lit = LitStr::new(&path_str, path.span());
-
-                let v = quote! { #symbol = #lit };
-                v.to_tokens(tokens);
-            }
-        }
+        self.raw.to_tokens(tokens);
     }
 }
 
 // ======================= RenameAttribute ======================= //
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct RenameAttribute {
-    pub ident: Ident,
+    value: Ident,
+    raw: MetaNameValue,
 }
 
 impl RenameAttribute {
+    pub fn value(&self) -> &Ident {
+        &self.value
+    }
+
+    pub fn into_value(self) -> Ident {
+        self.value
+    }
+
     pub fn unsupported_error(&self) -> syn::Error {
         syn::Error::new_spanned(self, "unsupported attribute")
     }
@@ -316,28 +359,32 @@ impl Symboled for RenameAttribute {
 
 impl Parse for RenameAttribute {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let symbol = input.parse::<Ident>()?;
-        if symbol != Self::symbol() {
+        let raw = input.parse::<MetaNameValue>()?;
+        if raw.path != Self::symbol() {
             return Err(syn::Error::new_spanned(
-                symbol,
+                &raw.path,
                 format_args!("'{}' expected", Self::symbol()),
             ));
         }
 
-        let _ = input.parse::<Token![=]>()?;
-        let lit = input.parse::<LitStr>()?;
+        let Expr::Lit(ExprLit {
+            lit: Lit::Str(lit), ..
+        }) = &raw.value
+        else {
+            return Err(syn::Error::new_spanned(
+                &raw.value,
+                "expected string literal",
+            ));
+        };
+
         let ident = lit.parse::<Ident>()?;
 
-        Ok(RenameAttribute { ident })
+        Ok(Self { value: ident, raw })
     }
 }
 
 impl ToTokens for RenameAttribute {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        let symbol = format_ident!("{}", Self::symbol());
-        let lit = LitStr::new(&self.ident.to_string(), self.ident.span());
-
-        let v = quote! { #symbol = #lit };
-        v.to_tokens(tokens);
+        self.raw.to_tokens(tokens);
     }
 }

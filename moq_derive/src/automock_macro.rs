@@ -18,6 +18,7 @@ pub fn automock_impl(
     Ok(output)
 }
 
+#[derive(Debug)]
 pub struct AutomockMacro {
     trait_def: ItemTrait,
     actions_def: ActionCollection,

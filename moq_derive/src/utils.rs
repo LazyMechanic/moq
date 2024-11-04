@@ -1,4 +1,4 @@
-use crate::attribute::{AttributePresent, MoqAttribute, OutputAttribute};
+use crate::attribute::{AttributePresent, MoqAttribute, OutputAttribute, OutputAttributeValue};
 use crate::context::Context;
 use crate::symbols;
 use quote::format_ident;
@@ -22,7 +22,7 @@ pub fn format_mock_ident(trait_def: &ItemTrait) -> Result<Ident, syn::Error> {
                 // #[moq(rename = "MockIdent")]
                 MoqAttribute::Rename(attr) => {
                     attr_present.check_and_hit(&attr)?;
-                    ident = Some(attr.ident);
+                    ident = Some(attr.into_value());
                 }
                 other => return Err(other.unsupported_error()),
             }
@@ -111,11 +111,11 @@ pub fn make_action_call_func_ret(
                             MoqAttribute::Output(attr) => {
                                 attr_present.check_and_hit(&attr)?;
 
-                                match attr {
-                                    OutputAttribute::FullPath(path) => {
+                                match attr.value() {
+                                    OutputAttributeValue::FullPath(path) => {
                                         ret_ty = Some(parse_quote! { #path });
                                     }
-                                    OutputAttribute::InferPath(path) => {
+                                    OutputAttributeValue::InferPath(path) => {
                                         ret_ty = Some(parse_quote! { #path<#default_ty> });
                                     }
                                 }

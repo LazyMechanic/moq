@@ -3,10 +3,11 @@ use crate::utils;
 use itertools::Itertools;
 
 use crate::attribute::{
-    AttributePresent, DefaultAttribute, DefaultWithAttribute, MoqAttribute, Symboled,
+    AttributePresent, DefaultAttribute, DefaultAttributeValue, DefaultWithAttribute, MoqAttribute,
+    Symboled,
 };
 use crate::utils::{AttributesExt, GenericsExt, ImplItemExt};
-use proc_macro2::TokenStream;
+use proc_macro2::{Span, TokenStream};
 use quote::{format_ident, quote, ToTokens};
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
@@ -231,7 +232,6 @@ fn trait_const(trait_cst: &TraitItemConst) -> Result<ImplItemConst, syn::Error> 
     let other_attrs = trait_cst.attrs.demoqified_iter().cloned().collect();
 
     let mut attr_present = AttributePresent::default();
-
     let mut expr = None;
     for attr in moq_attrs_iter {
         let nested_list =
@@ -241,21 +241,29 @@ fn trait_const(trait_cst: &TraitItemConst) -> Result<ImplItemConst, syn::Error> 
                 // #[moq(default = "123")]
                 MoqAttribute::Default(attr) => {
                     attr_present.check_and_hit(&attr)?;
-                    attr_present.check(&DefaultWithAttribute::symbol(), attr.span())?;
+                    attr_present.check_conflict(
+                        &DefaultWithAttribute::symbol(),
+                        &DefaultAttribute::symbol(),
+                        attr.span(),
+                    )?;
 
-                    match attr {
-                        DefaultAttribute::Expr(attr_expr) => {
+                    match attr.value() {
+                        DefaultAttributeValue::Expr(attr_expr) => {
                             expr = Some(parse_quote! { #attr_expr });
                         }
-                        other => return Err(other.unsupported_error()),
+                        _ => return Err(attr.unsupported_error()),
                     }
                 }
                 // #[moq(default_with = "::path::to::func")]
                 MoqAttribute::DefaultWith(attr) => {
                     attr_present.check_and_hit(&attr)?;
-                    attr_present.check(&DefaultAttribute::symbol(), attr.span())?;
+                    attr_present.check_conflict(
+                        &DefaultAttribute::symbol(),
+                        &DefaultWithAttribute::symbol(),
+                        attr.span(),
+                    )?;
 
-                    let attr_path = attr.path;
+                    let attr_path = attr.value();
                     expr = Some(parse_quote! { #attr_path() })
                 }
                 other => return Err(other.unsupported_error()),
@@ -298,17 +306,18 @@ fn trait_type(trait_ty: &TraitItemType) -> Result<ImplItemType, syn::Error> {
             attr.parse_args_with(Punctuated::<MoqAttribute, Token![,]>::parse_terminated)?;
         for nested in nested_list {
             match nested {
-                MoqAttribute::Default(default) => {
-                    attr_present.check_and_hit(&default)?;
-                    match default {
-                        DefaultAttribute::Expr(Expr::Lit(ExprLit {
-                            lit: Lit::Str(lit), ..
+                MoqAttribute::Default(attr) => {
+                    attr_present.check_and_hit(&attr)?;
+                    match attr.value() {
+                        DefaultAttributeValue::Expr(Expr::Lit(ExprLit {
+                            lit: Lit::Str(lit),
+                            ..
                         })) => {
                             ty = Some(lit.parse()?);
                         }
-                        other => {
-                            return Err(syn::Error::new_spanned(
-                                other,
+                        _ => {
+                            return Err(syn::Error::new(
+                                attr.span(),
                                 "expected value as string literal with type",
                             ))
                         }
@@ -346,19 +355,6 @@ fn trait_type(trait_ty: &TraitItemType) -> Result<ImplItemType, syn::Error> {
 }
 
 fn trait_func(cx: &Context, func: &TraitItemFn) -> Result<ImplItemFn, syn::Error> {
-    // TODO: add supporting static func
-    let is_static_func = !func
-        .sig
-        .inputs
-        .iter()
-        .any(|item| matches!(item, &FnArg::Receiver(_)));
-    if is_static_func {
-        return Err(syn::Error::new_spanned(
-            func,
-            "static functions are not supported yet",
-        ));
-    }
-
     let func_moq_attrs_iter = func.attrs.moqified_iter();
     let func_other_attrs_iter = func.attrs.demoqified_iter();
     let func_ident = &func.sig.ident;
@@ -382,11 +378,9 @@ fn trait_func(cx: &Context, func: &TraitItemFn) -> Result<ImplItemFn, syn::Error
                     match nested {
                         MoqAttribute::Default(attr) => {
                             attr_present.check_and_hit(&attr)?;
-                            match attr {
-                                DefaultAttribute::Flag => block = Some(def_block.clone()),
-                                other => {
-                                    return Err(syn::Error::new_spanned(other, "unexpected value"))
-                                }
+                            match attr.value() {
+                                DefaultAttributeValue::Flag => block = Some(def_block.clone()),
+                                _ => return Err(syn::Error::new(attr.span(), "unexpected value")),
                             }
                         }
                         other => return Err(other.unsupported_error()),

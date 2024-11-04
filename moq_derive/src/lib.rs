@@ -39,6 +39,6 @@ use proc_macro::TokenStream;
 pub fn automock(args: TokenStream, input: TokenStream) -> TokenStream {
     match automock_impl(args.into(), input.into()) {
         Ok(tokens) => tokens.into(),
-        Err(diag) => diag.emit_as_expr_tokens().into(),
+        Err(diag) => diag.emit_as_item_tokens().into(),
     }
 }
