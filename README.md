@@ -2,7 +2,7 @@
 
 [<img alt="Crates.io Version" src="https://img.shields.io/crates/v/moq?style=flat-square">](https://crates.io/crates/moq)
 [<img alt="docs.rs" src="https://img.shields.io/docsrs/moq?style=flat-square">](https://docs.rs/moq)
-[<img alt="GitHub Actions Workflow Status" src="https://img.shields.io/github/actions/workflow/status/LazyMechanic/moq/ci.yaml?branch=master&style=flat-square">](https://github.com/LazyMechanic/moq/actions/workflows/ci.yml)
+[<img alt="GitHub Actions Workflow Status" src="https://img.shields.io/github/actions/workflow/status/LazyMechanic/moq/ci.yml?branch=master&style=flat-square">](https://github.com/LazyMechanic/moq/actions/workflows/ci.yml)
 
 This library provides macro that provides mock struct generating that implements trait.
 
