@@ -35,7 +35,7 @@ impl PartialEq<Symbol<'_>> for String {
     }
 }
 
-impl<'a> PartialEq<Symbol<'_>> for &'a String {
+impl PartialEq<Symbol<'_>> for &String {
     fn eq(&self, other: &Symbol<'_>) -> bool {
         *self == other.0
     }
@@ -53,7 +53,7 @@ impl PartialEq<Symbol<'_>> for Ident {
     }
 }
 
-impl<'a> PartialEq<Symbol<'_>> for &'a Ident {
+impl PartialEq<Symbol<'_>> for &Ident {
     fn eq(&self, other: &Symbol<'_>) -> bool {
         *self == other.0
     }
@@ -65,7 +65,7 @@ impl PartialEq<Symbol<'_>> for Path {
     }
 }
 
-impl<'a> PartialEq<Symbol<'_>> for &'a Path {
+impl PartialEq<Symbol<'_>> for &Path {
     fn eq(&self, other: &Symbol<'_>) -> bool {
         self.is_ident(other.0)
     }

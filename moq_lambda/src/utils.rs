@@ -1,6 +1,4 @@
-use syn::parse::ParseStream;
-use syn::punctuated::Punctuated;
-use syn::{Attribute, FnArg, Token};
+use syn::{parse::ParseStream, punctuated::Punctuated, Attribute, FnArg, Token};
 
 pub fn parse_fn_args(input: ParseStream) -> Result<Punctuated<FnArg, Token![,]>, syn::Error> {
     let mut args = Punctuated::new();
