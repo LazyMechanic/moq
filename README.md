@@ -1,8 +1,8 @@
 # Moq
 
-[<img alt="crates.io" src="https://img.shields.io/crates/v/moq?style=flat-square">](https://crates.io/crates/moq)
+[<img alt="Crates.io Version" src="https://img.shields.io/crates/v/moq?style=flat-square">](https://crates.io/crates/moq)
 [<img alt="docs.rs" src="https://img.shields.io/docsrs/moq?style=flat-square">](https://docs.rs/moq)
-[<img alt="build" src="https://img.shields.io/github/workflow/status/LazyMechanic/moq/Rust?style=flat-square">](https://github.com/LazyMechanic/moq/actions)
+[<img alt="GitHub Actions Workflow Status" src="https://img.shields.io/github/actions/workflow/status/LazyMechanic/moq/ci.yaml?branch=master&style=flat-square">](https://github.com/LazyMechanic/moq/actions/workflows/ci.yml)
 
 This library provides macro that provides mock struct generating that implements trait.
 
@@ -29,12 +29,13 @@ fn test_ok() {
             assert_eq!(arg, -1);
             format!("Hello again, {}", -1)
         });
-    
+
     mock.func(42);
     mock.func(-1);
 }
 
 #[test]
+#[should_panic]
 fn test_failed_extra_call() {
     let mock = MockTrait::new()
         .expect_func(|arg: i64| {
@@ -47,6 +48,7 @@ fn test_failed_extra_call() {
 }
 
 #[test]
+#[should_panic]
 fn test_failed_missing_call() {
     let mock = MockTrait::new()
         .expect_func(|arg: i64| {
@@ -78,12 +80,12 @@ async fn test_ok() {
             assert_eq!(arg, 42);
             format!("Hello, {}", arg)
         });
-    
+
     mock.func(42).await;
 }
 ```
 
-You can find more examples in the [tests](https://github.com/LazyMechanic/moq/tree/master/test_suite/tests).
+You can find more examples in the [tests](test_suite/tests).
 
 ## TODO
 - [x] Supporting generic functions
