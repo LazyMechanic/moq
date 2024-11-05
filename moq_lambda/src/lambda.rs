@@ -1,12 +1,13 @@
-use crate::utils;
-
-use crate::env::Env;
 use quote::{format_ident, quote, ToTokens};
-use syn::parse::{Parse, ParseStream};
-use syn::spanned::Spanned;
 use syn::{
-    parenthesized, parse_quote, Block, FnArg, Generics, Ident, Pat, ReturnType, Token, Type,
+    parenthesized,
+    parse::{Parse, ParseStream},
+    parse_quote,
+    spanned::Spanned,
+    Block, FnArg, Generics, Ident, Pat, ReturnType, Token, Type,
 };
+
+use crate::{env::Env, utils};
 
 pub struct Lambda {
     self_ident: Ident,
