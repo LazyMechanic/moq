@@ -1,10 +1,10 @@
-name: CI
+name: Publish
 
 on:
+  workflow_dispatch:
   push:
-    branches: [ master ]
-  pull_request:
-    branches: [ master ]
+    tags:
+      - '*'
 
 env:
   CARGO_TERM_COLOR: always
@@ -66,3 +66,47 @@ jobs:
         run: cargo nextest run --all-features --package moq_lambda
       - name: 'Test (moq_test_suite)'
         run: cargo nextest run --all-features --package moq_test_suite
+
+  semver-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: 'Check semver'
+        uses: obi1kenobi/cargo-semver-checks-action@v2
+
+  crates_io_publish:
+    name: 'Publish (crates.io)'
+    needs:
+      - test
+      - semver-checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: 'cargo-release Cache'
+        id: cargo_release_cache
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/bin/cargo-release
+          key: ${{ runner.os }}-cargo-release
+
+      - run: cargo install cargo-release
+        if: steps.cargo_release_cache.outputs.cache-hit != 'true'
+
+      - name: 'cargo login'
+        run: cargo login ${{ secrets.CRATES_IO_API_TOKEN }}
+
+      # allow-branch HEAD is because GitHub actions switches
+      # to the tag while building, which is a detached head
+      - name: 'cargo release publish'
+        run: |-
+          cargo release \
+            publish \
+            --workspace \
+            --all-features \
+            --allow-branch master,HEAD \
+            --no-confirm \
+            --no-verify \
+            --execute
