@@ -30,7 +30,7 @@ use proc_macro::TokenStream;
 ///             assert_eq!(arg, -1);
 ///             format!("Hello again, {}", -1)
 ///         });
-///     
+///
 ///     mock.func(42);
 ///     mock.func(-1);
 /// }

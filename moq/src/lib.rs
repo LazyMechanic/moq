@@ -1,8 +1,22 @@
 //! # Moq
 //!
-//! This library provides macro that generates mock struct that implements trait.
+//! This library provides the procedural macro that generates a mock struct that implements trait.
 //!
-//! To get started, just add an attribute macro to the trait for which you want to generate a mock object:
+//! ## User guide
+//! - [Getting started](#getting-started)
+//! - [Mock object name](#mock-object-name)
+//! - [`async_trait`](#async_trait)
+//! - [Constants](#constants)
+//! - [Associated types](#associated-types)
+//! - [Default function implementation](#default-function-implementation)
+//! - [Impl trait](#impl-trait)
+//! - [Generics](#generics)
+//! - [HRTB](#hrtb)
+//! - [Restrictions](#restrictions)
+//!
+//! ### Getting started
+//!
+//! To get started, add an attribute macro to the trait for which you want to generate a mock object:
 //! ```
 //! #[moq::automock] // <-- this macro
 //! trait TraitForMocking {
@@ -10,7 +24,7 @@
 //! }
 //! ```
 //!
-//! Next, you can create a mock object and specify the expected behavior:
+//! Next, you can create a mock object and specify the expected behaviour:
 //! ```
 //! # #[moq::automock]
 //! # trait TraitForMocking {
@@ -18,7 +32,7 @@
 //! # }
 //! #[test]
 //! fn some_test() {
-//!     let mock = TraitForMockingMock::new()
+//!     let mock = MockTraitForMocking::new()
 //!         .expect_func_that_i_want_to_test(|arg: String| {
 //!             assert_eq!(arg, "Hello, World!");
 //!             Ok(())
@@ -28,65 +42,7 @@
 //! }
 //! ```
 //!
-//! Also supports `async_trait`:
-//! ```
-//! #[moq::automock] // <- the main limitation is to specify
-//!                  // the `automock` macro above the `async_trait`
-//! #[async_trait::async_trait]
-//! trait TraitForMocking {
-//!    async fn func_that_i_want_to_test(&self, arg: String) -> Result<(), std::io::Error>;
-//! }
-//!
-//! #[tokio::test]
-//! async fn some_test() {
-//!     let mock = TraitForMockingMock::new()
-//!         .expect_func_that_i_want_to_test(|arg: String| async {
-//!             assert_eq!(arg, "Hello, World!");
-//!             Ok(())
-//!         });
-//!
-//!     assert!(mock.func_that_i_want_to_test("Hello, World!".to_owned()).await.is_ok());
-//! }
-//! ```
-//!
-//! If function has arguments with lifetimes then `moq::lambda!` macro can help with it:
-//! ```
-//! #[derive(Debug, Eq, PartialEq)]
-//! struct Struct<'a>(&'a str);
-//!
-//! #[moq::automock]
-//! #[async_trait::async_trait]
-//! trait TraitForMocking {
-//!    async fn func_that_i_want_to_test<'a, 'b>(
-//!         &self,
-//!         arg1: Struct<'a>,
-//!         arg2: Struct<'b>,
-//!    ) -> Struct<'b>;
-//! }
-//!
-//! #[tokio::test]
-//! async fn some_test() {
-//!     let mock = TraitForMockingMock::new()
-//!         .expect_func_that_i_want_to_test(moq::lambda!(
-//!             async fn <'a, 'b>(arg1: Struct<'a>, arg2: Struct<'b>) -> Struct<'b> {
-//!                 assert_eq!(arg1, Struct("Hello"));
-//!                 assert_eq!(arg2, Struct("World"));
-//!                 arg2
-//!             }
-//!         ));
-//!
-//!     assert_eq!(
-//!         mock.func_that_i_want_to_test(
-//!             Struct("Hello"),
-//!             Struct("World"),
-//!         ).await,
-//!         Struct("World"),
-//!     );
-//! }
-//! ```
-//! More info about `moq::lambda!` macro you will find below.
-//!
-//! ## How its work
+//! #### How its work
 //! Generated mock struct checks that all specified expectation will calls in specified order.
 //! If `f1()` is called while `f2()` is expected, then there will be a panic.
 //! ```should_panic
@@ -113,200 +69,286 @@
 //! // Panic when mock will drop
 //! ```
 //!
-//! ## Attribute `#[moq(default)]` function
-//! Specifies that needs to use the default implementation of the function:
+//! ### Mock object name
+//!
+//! By default, mock object name will be `Mock%TRAIT%`, for example:
+//! ```
+//! // For trait:
+//! #[moq::automock]
+//! trait Trait { /*...*/ }
+//!
+//! // A mock will be generated:
+//! # let _ = stringify!(
+//! struct MockTrait { /*...*/ }
+//! # );
+//! # let _ = MockTrait::new();
+//! ```
+//!
+//! If you want to customise it, then use `rename` attribute:
+//! ```
+//! #[moq::automock(rename = "FooBar")]
+//! trait Trait { /*...*/ }
+//!
+//! // A mock will be generated:
+//! # let _ = stringify!(
+//! struct FooBar { /*...*/ }
+//! # );
+//! # let _ = FooBar::new();
+//! ```
+//!
+//! You can also add an attribute directly to a trait:
+//! ```
+//! #[moq::automock]
+//! #[moq(rename = "FooBar")]
+//! trait Trait { /*...*/ }
+//!
+//! // A mock will be generated:
+//! # let _ = stringify!(
+//! struct FooBar { /*...*/ }
+//! # );
+//! # let _ = FooBar::new();
+//! ```
+//!
+//! ### async_trait
+//!
+//! `automock` supports [`async_trait`](https://docs.rs/async-trait/latest/async_trait/):
+//!
+//! ```
+//! #[moq::automock] // <- the main limitation is to specify
+//!                  // the `automock` macro above the `async_trait`
+//! #[async_trait::async_trait]
+//! trait TraitForMocking {
+//!    async fn func_that_i_want_to_test(&self, arg: String) -> Result<(), std::io::Error>;
+//! }
+//!
+//! #[tokio::test]
+//! async fn some_test() {
+//!     let mock = MockTraitForMocking::new()
+//!         .expect_func_that_i_want_to_test(|arg: String| async {
+//!             assert_eq!(arg, "Hello, World!");
+//!             Ok(())
+//!         });
+//!
+//!     assert!(mock.func_that_i_want_to_test("Hello, World!".to_owned()).await.is_ok());
+//! }
+//! ```
+//!
+//! ### Constants
+//!
+//! There are 3 ways to specify the value of constants:
+//! - By using the `default` attribute and specifying the 'as is' expression
+//! - By using the `default_with` attribute and specifying the path to the constant function
+//! - Through the default value
+//!
+//! ```
+//! const fn const_str_default() -> &'static str { "string" }
+//!
+//! #[moq::automock]
+//! trait Trait {
+//!     #[moq(default_with = "const_str_default")]
+//!     const CONST_STR: &'static str;
+//!     #[moq(default = 1)]
+//!     const CONST_INT: i32;
+//!     const CONST_DEFAULT: usize = 42;
+//! }
+//!
+//! assert_eq!(MockTrait::CONST_STR, "string");
+//! assert_eq!(MockTrait::CONST_INT, 1);
+//! assert_eq!(MockTrait::CONST_DEFAULT, 42);
+//! ```
+//!
+//! ### Associated types
+//!
+//! You can specify the type of associated type by using the `default` attribute and specifying the type:
+//!
+//! ```
+//! #[moq::automock]
+//! trait Trait {
+//!     #[moq(default = "String")]
+//!     type AssocType: Clone;
+//! }
+//!
+//! let _: String = <MockTrait as Trait>::AssocType::from("string");
+//! ```
+//!
+//! ### Default function implementation
+//!
+//! If your trait has default implementation of function, then by default `automock` generate independent implementation:
+//!
 //! ```
 //! #[moq::automock]
 //! trait Trait {
 //!     fn f1(&self);
-//!     
-//!     #[moq(default)]
-//!     fn def(&self) {
+//!
+//!     fn f2(&self) {
 //!         self.f1();
 //!     }
 //! }
-//! let mock = MockTrait::new().expect_f1(|| {});
-//! mock.def(); // Success
+//!
+//! let mock = MockTrait::new()
+//!     .expect_f1(|| {})
+//!     .expect_f2(|| {});
+//!
+//! mock.f1();
+//! mock.f2();
+//! // Success
 //! ```
 //!
-//! ## Attribute `#[moq(default = "...")]` associative type
-//! Sets the associative type:
+//! If you want to use default implementation of function, you need to mark function by `default` attribute:
+//!
 //! ```
 //! #[moq::automock]
 //! trait Trait {
-//!     #[moq(default = "i32")]
-//!     type T;
+//!     fn f1(&self);
+//!
+//!     #[moq(default)]
+//!     fn f2(&self) {
+//!         self.f1();
+//!     }
 //! }
-//! let _: <MockTrait as Trait>::T = 42i32;
+//!
+//! let mock = MockTrait::new()
+//!     .expect_f1(|| {})
+//!     .expect_f1(|| {}); // <- attention here
+//!
+//! mock.f1();
+//! mock.f2();
+//! // Success
 //! ```
 //!
-//! ## Attribute `#[moq(default = ...)]` const
-//! Initializes or overrides default const value with specified value:
-//! ```
+//! ### Impl trait
+//!
+//! If you using RPITIT (Return Position Impl Trait In Trait), `automock` generates mock with boxed type:
+//!
+//! ```rust
+//! trait DummyTrait { fn dummy(&self) -> String; }
+//! impl DummyTrait for i32 { fn dummy(&self) -> String { format!("{self}") } }
+//! impl DummyTrait for &'static str { fn dummy(&self) -> String { format!("{self}") } }
+//! impl DummyTrait for Box<dyn DummyTrait> { fn dummy(&self) -> String { (**self).dummy() } }
+//!
 //! #[moq::automock]
 //! trait Trait {
-//!     #[moq(default = 42)]
-//!     const CONST: i32;
+//!     fn f(&self) -> impl DummyTrait;
 //! }
-//! assert_eq!(<MockTrait as Trait>::CONST, 42);
+//!
+//! let mock = MockTrait::new()
+//!     .expect_f(|| -> Box<dyn DummyTrait> {
+//!         Box::new(42i32)
+//!     })
+//!     .expect_f(|| -> Box<dyn DummyTrait> {
+//!         Box::new("string")
+//!     });
+//!
+//! assert_eq!(mock.f().dummy(), "42");
+//! assert_eq!(mock.f().dummy(), "string");
 //! ```
 //!
-//! ## Attribute `#[moq(default_with = "...")]` const
-//! Initializes or overrides default const value with specified const function:
+//! If boxed dyn trait doesn't suit you, you can specify a specific type by `output` attribute:
+//!
 //! ```
+//! trait DummyTrait { fn dummy(&self) -> String; }
+//! impl DummyTrait for i32 { fn dummy(&self) -> String { format!("{self}") } }
+//!
 //! #[moq::automock]
 //! trait Trait {
-//!     #[moq(default_with = "some_func")]
-//!     const CONST: i32;
+//!     #[moq(output = "i32")]
+//!     fn f(&self) -> impl DummyTrait;
 //! }
-//! const fn some_func() -> i32 { 42 }
-//! assert_eq!(MockTrait::CONST, 42);
+//!
+//! let mock = MockTrait::new()
+//!     .expect_f(|| -> i32 { 42i32 });
+//!
+//! assert_eq!(mock.f().dummy(), "42");
 //! ```
 //!
-//! ## Macro `moq::lambda!(...)`
-//! Helpful macro for generating closure with specified lifetimes.
+//! `output` attribute also supports infer syntax, may be useful for async:
+//!
+//! ```
+//! # use std::future::Future;
+//! # use std::pin::Pin;
+//!
+//! #[moq::automock]
+//! trait Trait {
+//!     #[moq(output = "Pin<_>")]
+//!     fn f(&self) -> impl Future<Output = i32>;
+//! }
+//!
+//! # async fn t() {
+//! let mock = MockTrait::new()
+//!     .expect_f(|| -> Pin<Box<dyn Future<Output = i32>>> {
+//!         Box::pin(async { 42i32 })
+//!     });
+//!
+//! assert_eq!(mock.f().await, 42);
+//! # }
+//! ```
+//!
+//! ### Generics
+//!
+//! Mocking generic methods is possible, but there are restrictions:
+//! - Generic parameter must be `'static` (maybe it will be fixed in the future)
+//! - Expectation function generic must be specified explicitly
+//!
+//! ```
+//! # use std::fmt::Display;
+//!
+//! #[moq::automock]
+//! trait Trait {
+//!     fn f<T>(&self, arg: T) where T: Display + 'static;
+//! }
+//!
+//! let mock = MockTrait::new()
+//!     .expect_f(|arg: i32| assert_eq!(arg, 123)); // <- explicit arg type
+//!
+//! mock.f(123);
+//! ```
+//!
+//! ### HRTB
+//!
 //! In rust you can't specify lifetimes for closure but you should, because lifetime
-//! inference in closure is dumb. Then this macro will help.
-//! Currently, capturing external variables is not possible, but this is in the plans.
+//! inference in closure is dumb. Then [`moq::lambda!(...)`](crate::lambda) macro will help.
 //!
-//! Syntax is like anonymous function:
 //! ```
-//! # fn main() {
-//! #[derive(Debug, PartialEq)]
-//! struct StructNamed {
-//!    field: i32,
+//! #[derive(Debug, Eq, PartialEq)]
+//! struct Struct<'a>(&'a str);
+//!
+//! #[moq::automock]
+//! #[async_trait::async_trait]
+//! trait Trait {
+//!    async fn f<'a, 'b>(
+//!         &self,
+//!         arg1: Struct<'a>,
+//!         arg2: Struct<'b>,
+//!    ) -> Struct<'b>;
 //! }
 //!
-//! impl StructNamed {
-//! fn get_field(&self) -> i32 {
-//!        self.field
-//!    }
-//! }
-//!
-//! struct StructUnnamed(i32);
-//!
-//! let arg1 = 1i32;
-//! let arg2 = 2i32;
-//! let arg3 = StructNamed { field: 3i32 };
-//! let arg4 = StructNamed { field: 4i32 };
-//! let arg5 = StructNamed { field: 5i32 };
-//! let arg6 = StructNamed { field: 6i32 };
-//! let arg7 = StructUnnamed(7i32);
-//!
-//! moq::lambda!(
-//! // Environment capturing (optional)
-//! //
-//! //      expression          var alias expression type
-//! //      |                   |         |
-//! //      vvvvvvvvvvvvvvvv    vvvvvv    vvvvvvvvvvv
-//!     [
-//!         arg1                       => i32,
-//!         arg2             as field0 => i32,
-//!         arg3                       => StructNamed,
-//!         arg4.field                 => i32,
-//!         arg5.field       as field2 => i32,
-//!         arg6.get_field() as field3 => i32,
-//!         arg7.0           as field4 => i32
-//!     ]
-//!
-//! // Function signature
-//! //  
-//! //  asyncness
-//! //  |        generic params (lifetimes)
-//! //  |        |    object that captured env, needs only if env specified
-//! //  |        |    |      arguments
-//! //  |        |    |      |                return type
-//! //  |        |    |      |                |
-//! //  vvvvv    vvvv vvvvv  vvvvvvvvvvvv     vvvvvvvvvvvv
-//!     async fn <'a>(&self, arg: &'a str) -> &'static str {
-//!         assert_eq!(self.arg1, 1);
-//!         assert_eq!(self.field0, 2);
-//!         assert_eq!(self.arg3, StructNamed { field: 3 });
-//!         assert_eq!(self.field, 4);
-//!         assert_eq!(self.field2, 5);
-//!         assert_eq!(self.field3, 6);
-//!         assert_eq!(self.field4, 7);
-//!         // ...
-//!         # unimplemented!()
-//!     }
-//! )
-//! # ;
-//! # }
-//! ```
-//!
-//! It turns to something like that:
-//! ```
-//! # fn main() {
-//! # struct StructNamed {
-//! #    field: i32,
-//! # }
-//! # impl StructNamed {
-//! # fn get_field(&self) -> i32 {
-//! #        self.field
-//! #    }
-//! # }
-//! # struct StructUnnamed(i32);
-//! # let arg1 = 1i32;
-//! # let arg2 = 2i32;
-//! # let arg3 = StructNamed { field: 3i32 };
-//! # let arg4 = StructNamed { field: 4i32 };
-//! # let arg5 = StructNamed { field: 5i32 };
-//! # let arg6 = StructNamed { field: 6i32 };
-//! # let arg7 = StructUnnamed(7i32);
-//! {
-//!     struct __MoqLambda {
-//!         arg1: i32,
-//!         field0: i32,
-//!         arg3: StructNamed,
-//!         field: i32,
-//!         field2: i32,
-//!         field3: i32,
-//!         field4: i32,
-//!     }
-//!     impl __MoqLambda {
-//!         fn new(
-//!             arg1: i32,
-//!             field0: i32,
-//!             arg3: StructNamed,
-//!             field: i32,
-//!             field2: i32,
-//!             field3: i32,
-//!             field4: i32,
-//!         ) -> Self {
-//!             Self {
-//!                 arg1,
-//!                 field0,
-//!                 arg3,
-//!                 field,
-//!                 field2,
-//!                 field3,
-//!                 field4,
-//!             }
+//! # async fn some_test() {
+//! let mock = MockTrait::new()
+//!     .expect_f(moq::lambda!(
+//!         async fn <'a, 'b>(arg1: Struct<'a>, arg2: Struct<'b>) -> Struct<'b> {
+//!             assert_eq!(arg1, Struct("Hello"));
+//!             assert_eq!(arg2, Struct("World"));
+//!             arg2
 //!         }
-//!     }
-//!     #[::moq::async_trait]
-//!     impl<'a> ::moq::AsyncFunc<(&'a str,), &'static str> for __MoqLambda {
-//!         async fn call<'__moq>(&'__moq self, (arg,): (&'a str,)) -> &'static str
-//!         where (&'a str,): '__moq,
-//!               &'static str: '__moq
-//!         {
-//!             // ...
-//!             # unimplemented!()
-//!         }
-//!     }
-//!     __MoqLambda::new(
-//!         arg1,             
-//!         arg2,             
-//!         arg3,             
-//!         arg4.field,       
-//!         arg5.field,       
-//!         arg6.get_field(),
-//!         arg7.0,           
-//!     )
-//! }
-//! # ;
+//!     ));
+//!
+//! assert_eq!(
+//!     mock.f(
+//!         Struct("Hello"),
+//!         Struct("World"),
+//!     ).await,
+//!     Struct("World"),
+//! );
 //! # }
 //! ```
+//!
+//! ### Restrictions
+//!
+//! - Generics must be `T: 'static`
+//! - Expectation function with generics should accept specific types (`mock.expect_f::<T, _>(|arg: T| {})`)
+//! - Anonymized lifetimes not allowed (`&'_ T`), make them explicit
+//! - Impl trait in argument position not allowed (`arg: impl Trait`), use generics instead
+//! - Static functions not supported yet
 
 pub use async_trait::async_trait;
 pub use moq_derive::automock;
