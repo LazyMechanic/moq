@@ -103,20 +103,4 @@ impl Visit<'_> for StaticFuncVisitor {
 
         visit::visit_signature(self, i);
     }
-    fn visit_fn_arg(&mut self, i: &FnArg) {
-        match i {
-            FnArg::Receiver(i) => {
-                visit::visit_receiver(self, i);
-            }
-            FnArg::Typed(i) => match &*i.ty {
-                Type::ImplTrait(_) if self.result.is_ok() => {
-                    self.result = Err(syn::Error::new_spanned(
-                        i,
-                        "`impl Trait` in argument position not supported, use generics `T: Trait` instead",
-                    ));
-                }
-                _ => visit::visit_pat_type(self, i),
-            },
-        }
-    }
 }

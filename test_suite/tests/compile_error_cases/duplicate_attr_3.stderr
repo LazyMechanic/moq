@@ -2,4 +2,4 @@ error: duplicate moq attribute: `default`
  --> tests/compile_error_cases/duplicate_attr_3.rs:3:24
   |
 3 |     #[moq(default = 1, default = 2)]
-  |                        ^^^^^^^^^^^
+  |                        ^^^^^^^

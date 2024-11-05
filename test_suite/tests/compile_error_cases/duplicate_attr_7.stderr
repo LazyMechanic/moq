@@ -2,4 +2,4 @@ error: conflict moq attributes: `default_with` and `default`
  --> tests/compile_error_cases/duplicate_attr_7.rs:8:11
   |
 8 |     #[moq(default = 1)]
-  |           ^^^^^^^^^^^
+  |           ^^^^^^^

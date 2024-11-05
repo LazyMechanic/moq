@@ -1,9 +1,12 @@
 use proc_macro2::TokenStream;
 use quote::{quote, ToTokens};
-use syn::parse::{Parse, ParseStream};
-use syn::spanned::Spanned;
-use syn::token::Bracket;
-use syn::{bracketed, Expr, Field, Ident, Member, Token, Type, Visibility};
+use syn::{
+    bracketed,
+    parse::{Parse, ParseStream},
+    spanned::Spanned,
+    token::Bracket,
+    Expr, Field, FieldMutability, Ident, Member, Token, Type, Visibility,
+};
 
 pub struct Env {
     args: Vec<EnvArg>,
@@ -159,6 +162,7 @@ impl ToTokens for EnvFieldsDef<'_> {
             .map(|arg| Field {
                 attrs: vec![],
                 vis: Visibility::Inherited,
+                mutability: FieldMutability::None,
                 ident: Some(arg.ident.clone()),
                 colon_token: Some(<Token![:]>::default()),
                 ty: arg.ty.clone(),

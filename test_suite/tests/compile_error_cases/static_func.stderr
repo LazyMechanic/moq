@@ -2,4 +2,4 @@ error: static functions not supported
  --> tests/compile_error_cases/static_func.rs:3:5
   |
 3 |     fn f();
-  |     ^^^^^^
+  |     ^^
