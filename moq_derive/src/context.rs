@@ -1,14 +1,15 @@
-use crate::utils;
+use syn::{parse::Parser, parse_quote, punctuated::Punctuated, Generics, Ident, ItemTrait, Token};
 
-use crate::attribute::MoqAttribute;
-use crate::utils::GenericsExt;
-use crate::validate::validate;
-use syn::parse::Parser;
-use syn::punctuated::Punctuated;
-use syn::{parse_quote, Generics, Ident, ItemTrait, Token};
+use crate::{
+    attribute::MoqAttribute,
+    utils,
+    utils::{Delifetimifing, Staticizing},
+    validate::validate,
+};
 
 #[derive(Debug)]
 pub struct Context {
+    #[allow(dead_code)]
     pub attrs: Vec<MoqAttribute>,
 
     pub trait_def: ItemTrait,
@@ -36,7 +37,7 @@ impl Context {
             }
         }
 
-        validate(&mut trait_def)?;
+        validate(&trait_def)?;
 
         let mock_ident = utils::format_mock_ident(&trait_def)?;
         let mock_generics = trait_def.generics.clone().delifetimified().staticized();

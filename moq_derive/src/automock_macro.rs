@@ -1,11 +1,13 @@
-use crate::action::{Action, ActionCollection};
-use crate::context::Context;
-use crate::mock::Mock;
 use proc_macro2_diagnostics::Diagnostic;
-
-use crate::utils::ItemTraitExt;
 use quote::{quote, ToTokens};
 use syn::{ItemTrait, TraitItem};
+
+use crate::{
+    action::{Action, ActionCollection},
+    context::Context,
+    mock::Mock,
+    utils::Demoqifing,
+};
 
 pub fn automock_impl(
     args: proc_macro2::TokenStream,
@@ -13,7 +15,6 @@ pub fn automock_impl(
 ) -> Result<proc_macro2::TokenStream, Diagnostic> {
     let p = AutomockMacro::from_ast(args, input)?;
     let output = quote! { #p };
-    //panic!("{}", output.to_string());
 
     Ok(output)
 }

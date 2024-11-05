@@ -1,5 +1,6 @@
-use quote::IdentFragment;
 use std::fmt::Display;
+
+use quote::IdentFragment;
 use syn::{Ident, Path};
 
 macro_rules! define_symbols(

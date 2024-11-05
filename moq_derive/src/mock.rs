@@ -1,20 +1,21 @@
-use crate::context::Context;
-use crate::utils;
 use itertools::Itertools;
-
-use crate::attribute::{
-    AttributePresent, DefaultAttribute, DefaultAttributeValue, DefaultWithAttribute, MoqAttribute,
-    Symboled,
-};
-use crate::utils::{AttributesExt, GenericsExt, ImplItemExt};
-use proc_macro2::{Span, TokenStream};
+use proc_macro2::TokenStream;
 use quote::{format_ident, quote, ToTokens};
-use syn::punctuated::Punctuated;
-use syn::spanned::Spanned;
 use syn::{
-    parse_quote, Attribute, Block, Expr, ExprLit, FnArg, GenericParam, Generics, Ident, ImplItem,
-    ImplItemConst, ImplItemFn, ImplItemType, ItemImpl, ItemStruct, Lit, Pat, Path, Token,
-    TraitItem, TraitItemConst, TraitItemFn, TraitItemType, Type, Visibility, WhereClause,
+    parse_quote, punctuated::Punctuated, spanned::Spanned, Attribute, Block, Expr, ExprLit, FnArg,
+    GenericParam, Generics, Ident, ImplItem, ImplItemConst, ImplItemFn, ImplItemType, ItemImpl,
+    ItemStruct, Lit, Pat, Path, Token, TraitItem, TraitItemConst, TraitItemFn, TraitItemType, Type,
+    Visibility, WhereClause,
+};
+
+use crate::{
+    attribute::{
+        AttributePresent, DefaultAttribute, DefaultAttributeValue, DefaultWithAttribute,
+        MoqAttribute, Symboled,
+    },
+    context::Context,
+    utils,
+    utils::{Delifetimifing, Demoqifing, Deselfifing, Merging, Moqifing, Staticizing},
 };
 
 #[derive(Debug)]

@@ -1,14 +1,16 @@
-use crate::context::Context;
-use crate::utils;
-
-use crate::utils::{make_action_call_func_ret, GenericsExt, TypeExt};
 use proc_macro2::TokenStream;
 use quote::{quote, ToTokens};
-use syn::punctuated::Punctuated;
-use syn::spanned::Spanned;
 use syn::{
-    parse_quote, FnArg, Generics, Ident, ItemImpl, ItemStruct, Pat, ReturnType, Token, TraitItemFn,
-    Type, TypeParamBound,
+    parse_quote, punctuated::Punctuated, spanned::Spanned, FnArg, Generics, Ident, ItemImpl,
+    ItemStruct, Pat, ReturnType, Token, TraitItemFn, Type, TypeParamBound,
+};
+
+use crate::{
+    context::Context,
+    utils,
+    utils::{
+        make_action_call_func_ret, Delifetimifing, Deselfifing, Lifetimifing, Merging, Staticizing,
+    },
 };
 
 #[derive(Debug)]

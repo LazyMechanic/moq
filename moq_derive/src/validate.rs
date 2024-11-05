@@ -1,29 +1,29 @@
 use std::ops::Not;
-use syn::visit_mut::VisitMut;
-use syn::{visit_mut, FnArg, ItemTrait, Signature, Type};
 
-pub fn validate(trait_def: &mut ItemTrait) -> Result<(), syn::Error> {
+use syn::{visit, visit::Visit, FnArg, ItemTrait, Signature, Type};
+
+pub fn validate(trait_def: &ItemTrait) -> Result<(), syn::Error> {
     check_impl_trait(trait_def)?;
     check_anon_lifetime(trait_def)?;
     check_static_func(trait_def)?;
     Ok(())
 }
 
-fn check_impl_trait(trait_def: &mut ItemTrait) -> Result<(), syn::Error> {
+fn check_impl_trait(trait_def: &ItemTrait) -> Result<(), syn::Error> {
     let mut vis = ImplTraitVisitor::default();
-    vis.visit_item_trait_mut(trait_def);
+    vis.visit_item_trait(trait_def);
     vis.result
 }
 
-fn check_anon_lifetime(trait_def: &mut ItemTrait) -> Result<(), syn::Error> {
+fn check_anon_lifetime(trait_def: &ItemTrait) -> Result<(), syn::Error> {
     let mut vis = AnonLifetimeVisitor::default();
-    vis.visit_item_trait_mut(trait_def);
+    vis.visit_item_trait(trait_def);
     vis.result
 }
 
-fn check_static_func(trait_def: &mut ItemTrait) -> Result<(), syn::Error> {
+fn check_static_func(trait_def: &ItemTrait) -> Result<(), syn::Error> {
     let mut vis = StaticFuncVisitor::default();
-    vis.visit_item_trait_mut(trait_def);
+    vis.visit_item_trait(trait_def);
     vis.result
 }
 
@@ -37,11 +37,11 @@ impl Default for ImplTraitVisitor {
     }
 }
 
-impl VisitMut for ImplTraitVisitor {
-    fn visit_fn_arg_mut(&mut self, i: &mut FnArg) {
+impl Visit<'_> for ImplTraitVisitor {
+    fn visit_fn_arg(&mut self, i: &FnArg) {
         match i {
             FnArg::Receiver(i) => {
-                visit_mut::visit_receiver_mut(self, i);
+                visit::visit_receiver(self, i);
             }
             FnArg::Typed(i) => match &*i.ty {
                 Type::ImplTrait(_) if self.result.is_ok() => {
@@ -50,7 +50,7 @@ impl VisitMut for ImplTraitVisitor {
                         "`impl Trait` in argument position not supported, use generics `T: Trait` instead",
                     ));
                 }
-                _ => visit_mut::visit_pat_type_mut(self, i),
+                _ => visit::visit_pat_type(self, i),
             },
         }
     }
@@ -66,8 +66,8 @@ impl Default for AnonLifetimeVisitor {
     }
 }
 
-impl VisitMut for AnonLifetimeVisitor {
-    fn visit_lifetime_mut(&mut self, i: &mut syn::Lifetime) {
+impl Visit<'_> for AnonLifetimeVisitor {
+    fn visit_lifetime(&mut self, i: &syn::Lifetime) {
         if i.ident == "_" && self.result.is_ok() {
             self.result = Err(syn::Error::new_spanned(
                 i,
@@ -87,8 +87,8 @@ impl Default for StaticFuncVisitor {
     }
 }
 
-impl VisitMut for StaticFuncVisitor {
-    fn visit_signature_mut(&mut self, i: &mut Signature) {
+impl Visit<'_> for StaticFuncVisitor {
+    fn visit_signature(&mut self, i: &Signature) {
         if self.result.is_ok() {
             let is_static_func = i
                 .inputs
@@ -97,19 +97,16 @@ impl VisitMut for StaticFuncVisitor {
                 .not();
 
             if is_static_func {
-                self.result = Err(syn::Error::new_spanned(
-                    &*i,
-                    "static functions not supported",
-                ));
+                self.result = Err(syn::Error::new_spanned(i, "static functions not supported"));
             }
         }
 
-        visit_mut::visit_signature_mut(self, i);
+        visit::visit_signature(self, i);
     }
-    fn visit_fn_arg_mut(&mut self, i: &mut FnArg) {
+    fn visit_fn_arg(&mut self, i: &FnArg) {
         match i {
             FnArg::Receiver(i) => {
-                visit_mut::visit_receiver_mut(self, i);
+                visit::visit_receiver(self, i);
             }
             FnArg::Typed(i) => match &*i.ty {
                 Type::ImplTrait(_) if self.result.is_ok() => {
@@ -118,7 +115,7 @@ impl VisitMut for StaticFuncVisitor {
                         "`impl Trait` in argument position not supported, use generics `T: Trait` instead",
                     ));
                 }
-                _ => visit_mut::visit_pat_type_mut(self, i),
+                _ => visit::visit_pat_type(self, i),
             },
         }
     }

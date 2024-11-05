@@ -1,14 +1,18 @@
-use crate::attribute::{AttributePresent, MoqAttribute, OutputAttribute, OutputAttributeValue};
-use crate::context::Context;
-use crate::symbols;
+#![allow(dead_code)]
+
 use quote::format_ident;
 use replace_with::replace_with_or_abort;
-use syn::punctuated::Punctuated;
-use syn::visit_mut::VisitMut;
 use syn::{
-    parse_quote, visit_mut, Attribute, BoundLifetimes, FnArg, GenericParam, Generics, Ident,
-    ImplItem, ItemTrait, PathArguments, PathSegment, QSelf, ReturnType, Token, TraitItem,
-    TraitItemFn, Type, TypeParamBound, TypePath, WhereClause, WherePredicate,
+    parse_quote, punctuated::Punctuated, visit_mut, visit_mut::VisitMut, Attribute, BoundLifetimes,
+    FnArg, GenericParam, Generics, Ident, ImplItem, ItemTrait, PathArguments, PathSegment, QSelf,
+    ReturnType, Token, TraitItem, TraitItemFn, Type, TypeParamBound, TypePath, WhereClause,
+    WherePredicate,
+};
+
+use crate::{
+    attribute::{AttributePresent, MoqAttribute, OutputAttributeValue},
+    context::Context,
+    symbols,
 };
 
 pub fn format_mock_ident(trait_def: &ItemTrait) -> Result<Ident, syn::Error> {
@@ -135,18 +139,97 @@ pub fn make_action_call_func_ret(
     }
 }
 
-// ======================= TRAIT ITEM ======================= //
+// ======================= EXT TRAITS ======================= //
 
-pub trait TraitItemExt {
-    fn demoqified(self) -> Self;
-    fn demoqify(&mut self);
-}
-
-impl TraitItemExt for TraitItem {
-    fn demoqified(mut self) -> Self {
+pub trait Demoqifing {
+    type IterItem;
+    fn demoqified_iter(&self) -> impl Iterator<Item = &Self::IterItem> {
+        std::iter::empty()
+    }
+    fn demoqified(mut self) -> Self
+    where
+        Self: Sized,
+    {
         self.demoqify();
         self
     }
+    fn demoqify(&mut self);
+}
+
+pub trait Moqifing {
+    type IterItem;
+    fn moqified_iter(&self) -> impl Iterator<Item = &Self::IterItem> {
+        std::iter::empty()
+    }
+    fn moqified(mut self) -> Self
+    where
+        Self: Sized,
+    {
+        self.moqify();
+        self
+    }
+    fn moqify(&mut self);
+}
+
+pub trait Merging {
+    fn merged(mut self, other: Self) -> Self
+    where
+        Self: Sized,
+    {
+        self.merge(other);
+        self
+    }
+    fn merge(&mut self, other: Self);
+}
+
+pub trait Lifetimifing {
+    fn lifetimified(mut self) -> Self
+    where
+        Self: Sized,
+    {
+        self.lifetimify();
+        self
+    }
+    fn lifetimify(&mut self);
+}
+
+pub trait Delifetimifing {
+    fn delifetimified(mut self) -> Self
+    where
+        Self: Sized,
+    {
+        self.delifetimify();
+        self
+    }
+    fn delifetimify(&mut self);
+}
+
+pub trait Staticizing {
+    fn staticized(mut self) -> Self
+    where
+        Self: Sized,
+    {
+        self.staticize();
+        self
+    }
+    fn staticize(&mut self);
+}
+
+pub trait Deselfifing {
+    fn deselfified(mut self, cx: &Context) -> Self
+    where
+        Self: Sized,
+    {
+        self.deselfify(cx);
+        self
+    }
+    fn deselfify(&mut self, cx: &Context);
+}
+
+// ======================= TRAIT ITEM ======================= //
+
+impl Demoqifing for TraitItem {
+    type IterItem = ();
 
     fn demoqify(&mut self) {
         let mut vis = DemoqifyVisitor;
@@ -156,16 +239,8 @@ impl TraitItemExt for TraitItem {
 
 // ======================= ITEM TRAIT ======================= //
 
-pub trait ItemTraitExt {
-    fn demoqified(self) -> Self;
-    fn demoqify(&mut self);
-}
-
-impl ItemTraitExt for ItemTrait {
-    fn demoqified(mut self) -> Self {
-        self.demoqify();
-        self
-    }
+impl Demoqifing for ItemTrait {
+    type IterItem = ();
 
     fn demoqify(&mut self) {
         let mut vis = DemoqifyVisitor;
@@ -175,17 +250,7 @@ impl ItemTraitExt for ItemTrait {
 
 // ======================= IMPL ITEM ======================= //
 
-pub trait ImplItemExt {
-    fn deselfified(self, cx: &Context) -> Self;
-    fn deselfify(&mut self, cx: &Context);
-}
-
-impl ImplItemExt for ImplItem {
-    fn deselfified(mut self, cx: &Context) -> Self {
-        self.deselfify(cx);
-        self
-    }
-
+impl Deselfifing for ImplItem {
     fn deselfify(&mut self, cx: &Context) {
         let mut vis = DeselfifyVisitor { cx };
         vis.visit_impl_item_mut(self);
@@ -194,37 +259,24 @@ impl ImplItemExt for ImplItem {
 
 // ======================= ATTRIBUTES ======================= //
 
-pub trait AttributesExt {
-    fn moqified_iter(&self) -> impl Iterator<Item = &Attribute>;
-    fn moqified(self) -> Self;
-    fn moqify(&mut self);
-    fn demoqified_iter(&self) -> impl Iterator<Item = &Attribute>;
-    fn demoqified(self) -> Self;
-    fn demoqify(&mut self);
-}
+impl Moqifing for Vec<Attribute> {
+    type IterItem = Attribute;
 
-impl AttributesExt for Vec<Attribute> {
-    fn moqified_iter(&self) -> impl Iterator<Item = &Attribute> {
+    fn moqified_iter(&self) -> impl Iterator<Item = &Self::IterItem> {
         self.iter().filter(|attr| attr.path() == symbols::MOQ)
-    }
-
-    fn moqified(mut self) -> Self {
-        self.moqify();
-        self
     }
 
     fn moqify(&mut self) {
         let mut vis = MoqifyVisitor;
         vis.visit_attributes_mut(self);
     }
+}
 
-    fn demoqified_iter(&self) -> impl Iterator<Item = &Attribute> {
+impl Demoqifing for Vec<Attribute> {
+    type IterItem = Attribute;
+
+    fn demoqified_iter(&self) -> impl Iterator<Item = &Self::IterItem> {
         self.iter().filter(|attr| attr.path() != symbols::MOQ)
-    }
-
-    fn demoqified(mut self) -> Self {
-        self.moqify();
-        self
     }
 
     fn demoqify(&mut self) {
@@ -235,60 +287,30 @@ impl AttributesExt for Vec<Attribute> {
 
 // ======================= GENERICS ======================= //
 
-pub trait GenericsExt {
-    /// Merge two generics into one
-    fn merged(self, other: Generics) -> Generics;
-    /// Merge two generics into one
-    fn merge(&mut self, other: Generics);
-    /// Filters generics for lifetimes and returns new generics with only lifetimes
-    fn lifetimified(self) -> Generics;
-    /// Filters generics for lifetimes and leaves generics only with lifetimes
-    fn lifetimify(&mut self);
-    /// Removes lifetimes from generics
-    fn delifetimified(self) -> Generics;
-    /// Removes lifetimes from generics
-    fn delifetimify(&mut self);
-    /// Applies `T: 'static` bound on every generic parameter
-    fn staticized(self) -> Generics;
-    /// Applies `T: 'static` bound on every generic parameter
-    fn staticize(&mut self);
-}
-
-impl GenericsExt for Generics {
-    fn merged(mut self, other: Generics) -> Generics {
-        self.merge(other);
-        self
-    }
-
-    fn merge(&mut self, other: Generics) {
+impl Merging for Generics {
+    fn merge(&mut self, other: Self) {
         merge_generics(self, other);
     }
+}
 
-    fn lifetimified(mut self) -> Generics {
-        self.lifetimify();
-        self
-    }
-
+impl Lifetimifing for Generics {
     fn lifetimify(&mut self) {
-        lifetimify_generics(self);
+        let mut vis = LifetimifyVisitor;
+        vis.visit_generics_mut(self);
     }
+}
 
-    fn delifetimified(mut self) -> Generics {
-        self.delifetimify();
-        self
-    }
-
+impl Delifetimifing for Generics {
     fn delifetimify(&mut self) {
-        delifetimify_generics(self);
+        let mut vis = DelifetimifyVisitor;
+        vis.visit_generics_mut(self);
     }
+}
 
-    fn staticized(mut self) -> Generics {
-        self.staticize();
-        self
-    }
-
+impl Staticizing for Generics {
     fn staticize(&mut self) {
-        staticize_generics(self);
+        let mut vis = StaticizeVisitor;
+        vis.visit_generics_mut(self);
     }
 }
 
@@ -310,95 +332,98 @@ fn merge_generics(dst: &mut Generics, other: Generics) {
     dst.gt_token = dst.gt_token.or(other.gt_token);
 }
 
-fn lifetimify_generics(gen: &mut Generics) {
-    replace_with_or_abort(gen, |mut gen| {
-        gen.params = gen
-            .params
-            .into_iter()
-            .filter(|p| matches!(p, GenericParam::Lifetime(_)))
-            .collect();
-
-        gen.where_clause = gen.where_clause.map(|mut wc| {
-            wc.predicates = wc
-                .predicates
-                .into_iter()
-                .filter_map(|pred| match pred {
-                    x @ WherePredicate::Lifetime(_) => Some(x),
-                    _ => None,
-                })
-                .collect();
-            wc
-        });
-
-        gen
-    });
-}
-
-/// Removes lifetimes from generics
-fn delifetimify_generics(gen: &mut Generics) {
-    replace_with_or_abort(gen, |mut gen| {
-        gen.params = gen
-            .params
-            .into_iter()
-            .filter(|p| !matches!(p, GenericParam::Lifetime(_)))
-            .collect();
-
-        gen.where_clause = gen.where_clause.map(|mut wc| {
-            wc.predicates = wc
-                .predicates
-                .into_iter()
-                .filter_map(|pred| match pred {
-                    WherePredicate::Type(mut ty) => {
-                        ty.bounds = ty
-                            .bounds
-                            .into_iter()
-                            .filter(|bound| !matches!(bound, TypeParamBound::Lifetime(_)))
-                            .collect();
-                        Some(WherePredicate::Type(ty))
-                    }
-                    WherePredicate::Lifetime(_) => None,
-                    _ => None,
-                })
-                .collect();
-            wc
-        });
-
-        gen
-    });
-}
-
-fn staticize_generics(gen: &mut Generics) {
-    let ident_iter = gen.params.iter().filter_map(|p| match p {
-        GenericParam::Type(ty) => Some(&ty.ident),
-        _ => None,
-    });
-
-    let where_clause = gen.where_clause.get_or_insert(WhereClause {
-        where_token: <Token![where]>::default(),
-        predicates: Punctuated::default(),
-    });
-    for ident in ident_iter {
-        let p = parse_quote! { #ident: 'static };
-        where_clause.predicates.push(p);
-    }
-}
-
 // ======================= TYPE ======================= //
 
-pub trait TypeExt {
-    fn deselfified(self, cx: &Context) -> Self;
-    fn deselfify(&mut self, cx: &Context);
-}
-
-impl TypeExt for Type {
-    fn deselfified(mut self, cx: &Context) -> Self {
-        self.deselfify(cx);
-        self
-    }
-
+impl Deselfifing for Type {
     fn deselfify(&mut self, cx: &Context) {
         let mut vis = DeselfifyVisitor { cx };
         vis.visit_type_mut(self);
+    }
+}
+
+// ======================= VISITORS ======================= //
+
+struct LifetimifyVisitor;
+
+impl VisitMut for LifetimifyVisitor {
+    fn visit_generics_mut(&mut self, i: &mut Generics) {
+        replace_with_or_abort(i, |mut gen| {
+            gen.params = gen
+                .params
+                .into_iter()
+                .filter(|p| matches!(p, GenericParam::Lifetime(_)))
+                .collect();
+
+            gen.where_clause = gen.where_clause.map(|mut wc| {
+                wc.predicates = wc
+                    .predicates
+                    .into_iter()
+                    .filter_map(|pred| match pred {
+                        x @ WherePredicate::Lifetime(_) => Some(x),
+                        _ => None,
+                    })
+                    .collect();
+                wc
+            });
+
+            gen
+        });
+    }
+}
+
+struct DelifetimifyVisitor;
+
+impl VisitMut for DelifetimifyVisitor {
+    fn visit_generics_mut(&mut self, i: &mut Generics) {
+        replace_with_or_abort(i, |mut gen| {
+            gen.params = gen
+                .params
+                .into_iter()
+                .filter(|p| !matches!(p, GenericParam::Lifetime(_)))
+                .collect();
+
+            gen.where_clause = gen.where_clause.map(|mut wc| {
+                wc.predicates = wc
+                    .predicates
+                    .into_iter()
+                    .filter_map(|pred| match pred {
+                        WherePredicate::Type(mut ty) => {
+                            ty.bounds = ty
+                                .bounds
+                                .into_iter()
+                                .filter(|bound| !matches!(bound, TypeParamBound::Lifetime(_)))
+                                .collect();
+                            Some(WherePredicate::Type(ty))
+                        }
+                        WherePredicate::Lifetime(_) => None,
+                        _ => None,
+                    })
+                    .collect();
+                wc
+            });
+
+            gen
+        });
+    }
+}
+
+struct StaticizeVisitor;
+
+impl VisitMut for StaticizeVisitor {
+    fn visit_generics_mut(&mut self, i: &mut Generics) {
+        let ident_iter = i.params.iter().filter_map(|p| match p {
+            GenericParam::Type(ty) => Some(&ty.ident),
+            _ => None,
+        });
+
+        let where_clause = i.where_clause.get_or_insert(WhereClause {
+            where_token: <Token![where]>::default(),
+            predicates: Punctuated::default(),
+        });
+        for ident in ident_iter {
+            let p = parse_quote! { #ident: 'static };
+            where_clause.predicates.push(p);
+        }
     }
 }
 

@@ -1,15 +1,16 @@
-use crate::symbols;
-use crate::symbols::Symbol;
+use std::collections::HashSet;
+
 use if_chain::if_chain;
 use proc_macro2::{Span, TokenStream};
 use quote::ToTokens;
-use std::collections::HashSet;
-use syn::parse::{Parse, ParseStream};
-use syn::spanned::Spanned;
 use syn::{
-    parse_quote, Expr, ExprLit, GenericArgument, Lit, MetaNameValue, Path, PathArguments, Type,
+    parse::{Parse, ParseStream},
+    parse_quote,
+    spanned::Spanned,
+    Expr, ExprLit, GenericArgument, Ident, Lit, Meta, MetaNameValue, Path, PathArguments, Type,
 };
-use syn::{Ident, Meta};
+
+use crate::{symbols, symbols::Symbol};
 
 #[derive(Debug, Default)]
 pub struct AttributePresent<'a> {
@@ -129,6 +130,7 @@ pub enum DefaultAttributeValue {
     Expr(Expr),
 }
 
+#[allow(dead_code)]
 impl DefaultAttribute {
     pub fn value(&self) -> &DefaultAttributeValue {
         &self.value
@@ -187,6 +189,7 @@ pub struct DefaultWithAttribute {
     raw: MetaNameValue,
 }
 
+#[allow(dead_code)]
 impl DefaultWithAttribute {
     pub fn value(&self) -> &Path {
         &self.value
@@ -254,6 +257,7 @@ pub enum OutputAttributeValue {
     InferPath(Path),
 }
 
+#[allow(dead_code)]
 impl OutputAttribute {
     pub fn value(&self) -> &OutputAttributeValue {
         &self.value
@@ -337,6 +341,7 @@ pub struct RenameAttribute {
     raw: MetaNameValue,
 }
 
+#[allow(dead_code)]
 impl RenameAttribute {
     pub fn value(&self) -> &Ident {
         &self.value
