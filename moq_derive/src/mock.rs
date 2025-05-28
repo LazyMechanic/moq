@@ -384,6 +384,7 @@ fn trait_func(cx: &Context, func: &TraitItemFn) -> Result<ImplItemFn, syn::Error
                                 _ => return Err(syn::Error::new(attr.span(), "unexpected value")),
                             }
                         }
+                        MoqAttribute::Output(_) => { /* do nothing */ }
                         other => return Err(other.unsupported_error()),
                     }
                 }

@@ -96,3 +96,26 @@ fn test4() {
         .expect_f(|| Box::pin(async { 42i32 }) as Pin<Box<dyn Future<Output = i32>>>);
     let _ = m.f::<i32>();
 }
+
+#[test]
+fn test5() {
+    trait DummyTrait {
+        fn dummy(&self) -> i32;
+    }
+    impl DummyTrait for i32 {
+        fn dummy(&self) -> i32 {
+            *self
+        }
+    }
+
+    #[moq::automock]
+    trait Trait {
+        #[moq(output = "i32")]
+        fn f(&self) -> impl DummyTrait {
+            32
+        }
+    }
+
+    let m = MockTrait::new().expect_f(|| 42);
+    assert_eq!(m.f().dummy(), 42);
+}
