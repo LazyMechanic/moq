@@ -1,6 +1,7 @@
 #[test]
 #[should_panic]
 fn test1() {
+    #[allow(dead_code)]
     #[moq::automock]
     trait Trait {
         fn f(&self);
@@ -37,6 +38,7 @@ fn test3() {
 #[tokio::test]
 #[should_panic]
 async fn test4() {
+    #[allow(dead_code)]
     #[moq::automock]
     #[async_trait::async_trait]
     trait Trait {
