@@ -59,10 +59,10 @@ jobs:
       - uses: taiki-e/install-action@nextest
 
       - name: 'Test (moq)'
-        run: cargo nextest run --all-features --package moq
+        run: cargo nextest run --all-features --no-tests=pass --package moq
       - name: 'Test (moq_derive)'
-        run: cargo nextest run --all-features --package moq_derive
+        run: cargo nextest run --all-features --no-tests=pass --package moq_derive
       - name: 'Test (moq_lambda)'
-        run: cargo nextest run --all-features --package moq_lambda
+        run: cargo nextest run --all-features --no-tests=pass --package moq_lambda
       - name: 'Test (moq_test_suite)'
-        run: cargo nextest run --all-features --package moq_test_suite
+        run: cargo nextest run --all-features --no-tests=pass --package moq_test_suite
