@@ -351,7 +351,7 @@
 //! - Static functions not supported yet
 
 pub use async_trait::async_trait;
-pub use moq_derive::automock;
+pub use moq_derive::{automock, moq};
 pub use moq_lambda::lambda;
 
 pub trait Func<Args, Ret> {

@@ -43,3 +43,10 @@ pub fn automock(args: TokenStream, input: TokenStream) -> TokenStream {
         Err(diag) => diag.emit_as_item_tokens().into(),
     }
 }
+
+#[proc_macro_attribute]
+pub fn moq(_args: TokenStream, input: TokenStream) -> TokenStream {
+    // Noop macro.
+    // This "attribute" is processed by real proc macro.
+    input
+}

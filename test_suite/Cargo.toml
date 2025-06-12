@@ -13,3 +13,8 @@ moq = { path = "../moq" }
 async-trait = "0.1.53"
 tokio = { version = "1.17.0", features = ["full"] }
 trybuild = "1.0.101"
+
+[features]
+default = []
+
+disabled-feature = []
