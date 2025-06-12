@@ -128,7 +128,15 @@ pub fn make_action_call_func_ret(
                         }
                     }
                 }
-                let ret_ty = ret_ty.unwrap_or(default_ty).deselfified(cx);
+                let ret_ty = ret_ty
+                    .unwrap_or_else(|| {
+                        if is_pin_boxed(bounds) {
+                            parse_quote! { ::std::pin::Pin<#default_ty> }
+                        } else {
+                            default_ty
+                        }
+                    })
+                    .deselfified(cx);
                 Ok(Some(ret_ty))
             }
             other => {
@@ -137,6 +145,23 @@ pub fn make_action_call_func_ret(
             }
         },
     }
+}
+
+fn is_pin_boxed(bounds: &Punctuated<TypeParamBound, Token![+]>) -> bool {
+    fn is_pin_boxed_type(ident: &Ident) -> bool {
+        ident == "Future" || ident == "Stream"
+    }
+
+    let Some(first) = bounds.first() else {
+        return false;
+    };
+    let TypeParamBound::Trait(trai) = first else {
+        return false;
+    };
+    trai.path
+        .segments
+        .last()
+        .map_or(false, |ts| is_pin_boxed_type(&ts.ident))
 }
 
 // ======================= EXT TRAITS ======================= //
